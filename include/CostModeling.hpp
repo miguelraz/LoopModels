@@ -5,6 +5,7 @@
 #include "./Math.hpp"
 #include "./MemoryAccess.hpp"
 #include "./Schedule.hpp"
+#include "LoopBlock.hpp"
 #include <cstdint>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/ADT/SmallVector.h>
@@ -143,6 +144,12 @@ struct LoopTreeSchedule {
     return subTrees.size();
   }
   [[nodiscard]] auto getDepth() const -> size_t { return depth; }
+  auto operator=(const LinearProgramLoopBlock &other) -> LoopTreeSchedule & {
+    // Memory management note: the parent LoopTreeSchedule is rooted
+    // all branches are allocated from other.
+
+    return *this;
+  }
 };
 
 struct LoopForestSchedule {

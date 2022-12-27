@@ -21,13 +21,14 @@ void buildInstructionGraph(llvm::BumpPtrAllocator &alloc,
                            Instruction::Cache &cache,
                            LinearProgramLoopBlock &LB) {
   for (auto mem : LB.getMemoryAccesses()) {
+    // if the memory access isn't connected to anything, we can ignore
     if (mem->nodeIndex.isEmpty())
       continue;
     // TODO: add a means for cache.get to stop adding operands
     // that are outside of LB, as we don't care about that part of the
     // graph.
     Instruction *inst = cache.getInstruction(alloc, mem->getInstruction());
-    inst->ptr = &mem->ref;
+    inst->ptr = mem;
   }
 }
 

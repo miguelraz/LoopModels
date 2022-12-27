@@ -79,7 +79,13 @@ public:
   [[no_unique_address]] llvm::ScalarEvolution *SE;
   [[no_unique_address]] llvm::OptimizationRemarkEmitter *ORE;
   [[no_unique_address]] LinearProgramLoopBlock loopBlock;
+  // this allocator lives for the life of the TurboLoopPass, and mass frees
   [[no_unique_address]] llvm::BumpPtrAllocator allocator;
+  // this allocator is used for LoopForests
+  [[no_unique_address]] llvm::BumpPtrAllocator loopAllocator;
+  // this allocator is used whenever we need a lot of allocations in a temporary
+  // for example, when merging control flow branches.
+  [[no_unique_address]] llvm::BumpPtrAllocator tmpAllocator;
   [[no_unique_address]] Instruction::Cache instrCache;
   [[no_unique_address]] unsigned registerCount;
 
