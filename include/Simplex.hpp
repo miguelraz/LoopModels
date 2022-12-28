@@ -24,31 +24,29 @@ struct Simplex {
   // column 0: indicates whether that row (constraint) is basic,
   //           and if so which one
   // column 1: constraint values
-  Matrix<int64_t, 0, 0, 0> tableau;
+  Matrix<int64_t, unsigned, unsigned, 0> tableau;
   size_t numSlackVar{0};
 #ifndef NDEBUG
   bool inCanonicalForm{false};
 #endif
   static constexpr size_t numExtraRows = 2;
   static constexpr size_t numExtraCols = 1;
-  static constexpr auto numTableauRows(size_t i) -> Row {
-    return Row{i + numExtraRows};
+  static constexpr auto numTableauRows(size_t i) -> Row<> {
+    return toRow(i + numExtraRows);
   }
-  static constexpr auto numTableauCols(size_t j) -> Col {
-    return Col{j + numExtraCols};
+  static constexpr auto numTableauCols(size_t j) -> Col<> {
+    return toCol(j + numExtraCols);
   }
   // NOTE: all methods resizing the tableau may invalidate references to it
   void resize(size_t numCon, size_t numVar) {
     tableau.resize(numTableauRows(numCon), numTableauCols(numVar));
   }
-  void resize(size_t numCon, size_t numVar, LinearAlgebra::RowStride stride) {
+  void resize(size_t numCon, size_t numVar, RowStride<> stride) {
     tableau.resize(numTableauRows(numCon), numTableauCols(numVar), stride);
   }
   void addVars(size_t numVars) {
-    Col numCol = tableau.numCol() + numVars;
-    tableau.resize(tableau.numRow(), numCol,
-                   LinearAlgebra::RowStride{
-                     std::max(size_t(numCol), size_t(tableau.rowStride()))});
+    Col<> numCol = tableau.numCol() + numVars;
+    tableau.resize(tableau.numRow(), numCol, max(numCol, tableau.rowStride()));
   }
   auto addConstraint() -> MutPtrVector<int64_t> {
     tableau.resize(tableau.numRow() + 1, tableau.numCol(), tableau.rowStride());
@@ -68,25 +66,25 @@ struct Simplex {
   void reserve(size_t numCon, size_t numVar) {
     tableau.reserve(
       numTableauRows(numCon),
-      Col{size_t(max(numTableauCols(numVar), tableau.rowStride()))});
+      toCol(size_t(max(numTableauCols(numVar), tableau.rowStride()))));
   }
   void clearReserve(size_t numCon, size_t numVar) {
     numSlackVar = 0;
     tableau.clearReserve(
       numTableauRows(numCon),
-      Col{size_t(max(numTableauCols(numVar), tableau.rowStride()))});
+      toCol(size_t(max(numTableauCols(numVar), tableau.rowStride()))));
   }
   void reserveExtraRows(size_t additionalRows) {
     tableau.reserve(tableau.numRow() + additionalRows, tableau.rowStride());
   }
-  void reserveExtra(Row additionalRows, Col additionalCols) {
-    LinearAlgebra::RowStride newStride =
+  void reserveExtra(Row<> additionalRows, Col<> additionalCols) {
+    RowStride<> newStride =
       max(tableau.numCol() + additionalCols, tableau.rowStride());
     tableau.reserve(tableau.numRow() + additionalRows, newStride);
     if (newStride == tableau.rowStride())
       return;
     // copy memory, so that incrementally adding columns is cheap later.
-    Col nC = tableau.numCol();
+    Col<> nC = tableau.numCol();
     tableau.resize(tableau.numRow(), nC, newStride);
   }
   void reserveExtra(size_t additional) { reserveExtra(additional, additional); }
@@ -649,7 +647,7 @@ struct Simplex {
     size_t ind = basicConstraints[i];
     size_t lastRow = size_t(C.numRow() - 1);
     if (lastRow != ind)
-      swap(C, Row{ind}, Row{lastRow});
+      swap(C, toRow(ind), toRow(lastRow));
     truncateConstraints(lastRow);
   }
   void removeExtraVariables(size_t i) {

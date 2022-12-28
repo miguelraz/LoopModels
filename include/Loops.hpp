@@ -284,7 +284,7 @@ struct AffineLoopNest
     } else if (const auto *ex = llvm::dyn_cast<const llvm::SCEVAddExpr>(v)) {
       const llvm::SCEV *op0 = ex->getOperand(0);
       const llvm::SCEV *op1 = ex->getOperand(1);
-      Row M = A.numRow();
+      Row<> M = A.numRow();
       minDepth = addSymbol(B, L, op0, SE, lu, mlt, minDepth);
       if (M != A.numRow())
         minDepth = addSymbol(B, L, op1, SE, _(M, A.numRow()), mlt, minDepth);
@@ -325,8 +325,8 @@ struct AffineLoopNest
       const llvm::SCEV *op1 = ex->getOperand(1);
       if (isMin ^
           (mlt < 0)) { // we can represent this as additional constraints
-        Row M = A.numRow();
-        Row Mp = M + lu.size();
+        Row<> M = A.numRow();
+        Row<> Mp = M + lu.size();
         A.resize(Mp);
         B.resize(Mp);
         A(_(M, Mp), _) = A(lu, _);
@@ -357,7 +357,7 @@ struct AffineLoopNest
   auto addBackedgeTakenCount(IntMatrix &B, llvm::Loop *L, const llvm::SCEV *BT,
                              llvm::ScalarEvolution &SE, size_t minDepth,
                              llvm::OptimizationRemarkEmitter *ORE) -> size_t {
-    Row M = A.numRow();
+    Row<> M = A.numRow();
     A.resize(M + 1);
     B.resize(M + 1);
     minDepth = addSymbol(B, L, BT, SE, _(M, M + 1), 1, minDepth);
@@ -450,7 +450,7 @@ struct AffineLoopNest
       }
     }
     size_t depth = maxDepth - minDepth;
-    Col N = A.numCol();
+    Col<> N = A.numCol();
     A.resize(N + depth);
     // copy the included loops from B into A
     A(_, _(N, N + depth)) = B(_, _(0, depth));
@@ -470,7 +470,7 @@ struct AffineLoopNest
       if (A(m, innermostLoopInd)) {
         // B(_(m,end-1),_) = B(_(m+1,end),_);
         // make sure we're explicit about the order we copy rows
-        Row M = B.numRow() - 1;
+        Row<> M = B.numRow() - 1;
         for (size_t r = m; r < M; ++r)
           B(r, _) = B(r + 1, _);
         B.resize(M);

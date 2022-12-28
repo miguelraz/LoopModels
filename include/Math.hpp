@@ -100,7 +100,6 @@ template <AxisType T, IntConvertible V = size_t> struct AxisInt {
   static constexpr AxisType Axis = T;
   using I = V;
   [[no_unique_address]] V value;
-  // [[no_unique_address]] unsigned int value{0};
   constexpr AxisInt() = default;
   constexpr AxisInt(V value) : value(value) {}
   explicit constexpr operator size_t() const { return value; }
@@ -622,6 +621,12 @@ static inline constexpr struct End {
   }
 } end;
 
+constexpr auto unwrapRow(IsRow auto x) -> size_t { return size_t(x); }
+constexpr auto unwrapCol(IsCol auto x) -> size_t { return size_t(x); }
+constexpr auto unwrapRow(auto x) { return x; }
+constexpr auto unwrapCol(auto x) { return x; }
+constexpr auto unwrap(RowOrCol auto x) { return *x; }
+constexpr auto unwrap(auto x) { return x; }
 // FIXME: we currently lose strong typing of Row and Col when using relative
 // indexing; we should preserve it, perhaps within the OffsetBegin row/struct,
 // making them templated?
@@ -633,6 +638,7 @@ constexpr auto operator+(Begin, ScalarValueIndex auto x) { return x; }
 template <IntConvertible I> struct OffsetEnd {
   static constexpr bool IsOffsetEnd = true;
   [[no_unique_address]] I offset;
+  constexpr OffsetEnd(I offset) : offset(offset) {}
 };
 template <typename T>
 concept IsOffsetEnd =
@@ -672,6 +678,7 @@ template <IntConvertible B, IntConvertible E> struct Range<B, E> {
   [[no_unique_address]] B b;
   [[no_unique_address]] E e;
   // wrapper that allows dereferencing
+  constexpr Range(B b, E e) : b(b), e(e) {}
   struct Iterator {
     [[no_unique_address]] size_t i;
     constexpr auto operator==(E e) -> bool { return i == e; }
@@ -747,7 +754,9 @@ static inline constexpr struct Colon {
 static inline void checkIndex(size_t X, size_t x) { assert(x < X); }
 inline void checkIndex(size_t X, End) { assert(X > 0); }
 inline void checkIndex(size_t X, Begin) { assert(X > 0); }
-inline void checkIndex(size_t X, IsOffsetEnd auto x) { assert(x.offset < X); }
+inline void checkIndex(size_t X, IsOffsetEnd auto x) {
+  assert(size_t(x.offset) < X);
+}
 template <typename B> inline void checkIndex(size_t X, Range<B, size_t> x) {
   assert(x.e <= X);
 }
@@ -781,13 +790,10 @@ template <typename T>
 concept ScalarIndex = std::integral<T> || RelativeOffset<T>;
 
 template <typename B, typename E, IntConvertible I>
-constexpr auto canonicalizeRange(Range<B, E> r, I M) -> Range<size_t, size_t> {
-  return Range<size_t, size_t>{canonicalizeForRange(r.b, M),
-                               canonicalizeForRange(r.e, M)};
+constexpr auto canonicalizeRange(Range<B, E> r, I M) {
+  return Range(canonicalizeForRange(r.b, M), canonicalizeForRange(r.e, M));
 }
-constexpr auto canonicalizeRange(Colon, size_t M) -> Range<size_t, size_t> {
-  return Range<size_t, size_t>{0, M};
-}
+constexpr auto canonicalizeRange(Colon, size_t M) { return Range(0, M); }
 
 template <typename B, typename E>
 constexpr auto operator+(Range<B, E> r, size_t x) {
@@ -845,9 +851,12 @@ template <typename T, IntConvertible I> struct StridedIterator {
     return data != x.data;
   }
 };
-template <typename T>
-constexpr auto default_iterator(T *data, Static<size_t, 1>) -> T * {
-  return data;
+template <typename T, typename I, I N>
+constexpr auto default_iterator(T *data, Static<I, N>) {
+  if constexpr (N == 1)
+    return data;
+  else
+    return StridedIterator<T, I>{data, N};
 }
 template <typename T, IntConvertible I>
 constexpr auto default_iterator(T *data, I stride) -> StridedIterator<T, I> {
@@ -875,7 +884,7 @@ template <typename T, typename V> struct ConstVectorCore {
     assert(i < size());
     return data()[i * stride()];
   }
-  auto operator==(AbstractVector auto &x) -> bool {
+  auto operator==(const AbstractVector auto &x) const -> bool {
     if (size() != x.size())
       return false;
     const T *p = data();
@@ -925,36 +934,53 @@ template <typename T, typename V> struct ConstVectorCore {
     return std::reverse_iterator(begin());
   }
   constexpr operator llvm::ArrayRef<T>() const {
-    static_assert(std::is_same_v<Static<size_t, 1>, decltype(stride())>);
+    static_assert(std::is_same_v<Static<ptrdiff_t, 1>, decltype(stride())>);
     return llvm::ArrayRef<T>{data(), size()};
   }
-  // llvm::ArrayRef<T> arrayref() const { return llvm::ArrayRef<T>(ptr, M); }
-  auto operator==(const PtrVector<T> x) const -> bool {
+  auto operator==(const PtrVector<T> &x) const -> bool {
     return size() == x.size() && std::equal(begin(), end(), x.begin());
   }
+  // llvm::ArrayRef<T> arrayref() const { return llvm::ArrayRef<T>(ptr, M); }
   auto operator==(const llvm::ArrayRef<std::remove_const_t<T>> x) const
     -> bool {
     return size() == x.size() && std::equal(begin(), end(), x.begin());
   }
-  [[nodiscard]] constexpr auto view() const -> PtrVector<T> { return *this; };
+  [[nodiscard]] constexpr auto view() const {
+    return PtrVector(data(), size(), stride());
+  };
 };
-
+template <typename T, typename V> struct MutVectorCore;
 template <typename T, UnsignedIntConvertible I, SignedIntConvertible J>
 struct PtrVector : ConstVectorCore<T, PtrVector<T, I>> {
-
+  using Base = ConstVectorCore<T, PtrVector<T, I>>;
+  using Base::operator==, Base::operator[],
+    Base::operator(), Base::begin, Base::end, Base::rbegin, Base::rend;
+  // Base::operator ::LinearAlgebra::PtrVector<T, I, J>;
   static_assert(!std::is_const_v<T>, "const T is redundant");
   using eltype = T;
   [[no_unique_address]] const T *const mem;
   [[no_unique_address]] const I N;
   [[no_unique_address]] const J X;
-
   [[nodiscard]] constexpr auto rawSize() const -> I { return N; }
   [[nodiscard]] constexpr auto size() const -> size_t { return N; }
   [[nodiscard]] constexpr auto data() const -> const T * { return mem; }
-  [[nodiscard]] static constexpr auto stride() -> Static<size_t, 1> {
+  [[nodiscard]] static constexpr auto stride() -> Static<ptrdiff_t, 1> {
     return {};
   }
+  auto operator==(const PtrVector<T> &x) const -> bool {
+    return size() == x.size() && std::equal(begin(), end(), x.begin());
+  }
   constexpr void extendOrAssertSize(size_t M) const { assert(M == size()); }
+  constexpr PtrVector(const T *mem, I N) : mem(mem), N(N) {
+    static_assert(std::is_same_v<J, Static<ptrdiff_t, 1>>);
+  }
+  constexpr PtrVector(const T *mem, I N, J X) : mem(mem), N(N), X(X) {}
+  // template <UnsignedIntConvertible K, SignedIntConvertible L>
+  // constexpr PtrVector(const PtrVector<T, K, L> &x)
+  //   : mem(x.data()), N(x.size()), X(x.stride()) {}
+  template <typename V>
+  constexpr PtrVector(const MutVectorCore<T, V> &x)
+    : mem(x.data()), N(x.size()), X(x.stride()) {}
 };
 
 static_assert(
@@ -1037,22 +1063,23 @@ template <typename T, typename V> struct MutVectorCore {
   }
   // copy constructor
   // MutPtrVector(const MutPtrVector<T> &x) : mem(x.mem), N(x.N) {}
-  constexpr auto operator()(Range<size_t, size_t> i) -> MutPtrVector<T> {
-    assert(i.b <= i.e);
-    assert(i.e <= size());
+  template <IntConvertible B, IntConvertible E>
+  constexpr auto operator()(Range<B, E> i) {
+    assert(size_t(i.b) <= size_t(i.e));
+    assert(size_t(i.e) <= size());
     return MutPtrVector(data() + i.b * stride(), i.e - i.b, stride());
   }
-  constexpr auto operator()(Range<size_t, size_t> i) const -> PtrVector<T> {
-    assert(i.b <= i.e);
-    assert(i.e <= size());
+  template <IntConvertible B, IntConvertible E>
+  constexpr auto operator()(Range<B, T> i) const {
+    assert(size_t(i.b) <= size_t(i.e));
+    assert(size_t(i.e) <= size());
     return PtrVector(data() + i.b * stride(), i.e - i.b, stride());
   }
-  template <typename F, typename L>
-  constexpr auto operator()(Range<F, L> i) -> MutPtrVector<T> {
+  template <typename F, typename L> constexpr auto operator()(Range<F, L> i) {
     return (*this)(canonicalizeRange(i, size()));
   }
   template <typename F, typename L>
-  constexpr auto operator()(Range<F, L> i) const -> PtrVector<T> {
+  constexpr auto operator()(Range<F, L> i) const {
     return (*this)(canonicalizeRange(i, size()));
   }
   [[nodiscard]] constexpr auto begin() const {
@@ -1079,6 +1106,9 @@ template <typename T, typename V> struct MutVectorCore {
   constexpr operator PtrVector<T>() const {
     return PtrVector(data(), size(), stride());
   }
+  // constexpr operator MutPtrVector<T>() {
+  //   return MutPtrVector(data(), size(), stride());
+  // }
   constexpr operator llvm::ArrayRef<T>() const {
     static_assert(std::is_same_v<Static<size_t, 1>, decltype(stride())>);
     return llvm::ArrayRef<T>{data(), size()};
@@ -1101,81 +1131,84 @@ template <typename T, typename V> struct MutVectorCore {
   // PtrVector<T> view() const {
   //     return PtrVector<T>{.mem = mem, .N = N};
   // };
-  auto operator=(PtrVector<T> x) -> MutPtrVector<T> { return copyto(*this, x); }
-  auto operator=(MutPtrVector<T> x) -> MutPtrVector<T> {
-    return copyto(*this, x);
+  auto operator=(PtrVector<T> x) -> V & { return copyto(*this, x); }
+  auto operator=(MutPtrVector<T> x) -> V & { return copyto(*this, x); }
+  auto operator=(const AbstractVector auto &x) -> V & {
+    return copyto(*static_cast<V *>(this), x);
   }
-  auto operator=(const AbstractVector auto &x) -> MutPtrVector<T> {
-    return copyto(*this, x);
-  }
-  auto operator=(std::integral auto x) -> MutPtrVector<T> {
+  auto operator=(std::integral auto x) -> V & {
     for (auto &&y : *this)
       y = x;
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator+=(const AbstractVector auto &x) -> MutPtrVector<T> {
+  auto operator+=(const AbstractVector auto &x) -> V & {
     size_t N = size();
     assert(N == x.size());
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] += x(i);
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator-=(const AbstractVector auto &x) -> MutPtrVector<T> {
+  auto operator-=(const AbstractVector auto &x) -> V & {
     size_t N = size();
     assert(N == x.size());
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] -= x(i);
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator*=(const AbstractVector auto &x) -> MutPtrVector<T> {
+  auto operator*=(const AbstractVector auto &x) -> V & {
     size_t N = size();
     assert(N == x.size());
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] *= x(i);
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator/=(const AbstractVector auto &x) -> MutPtrVector<T> {
+  auto operator/=(const AbstractVector auto &x) -> V & {
     size_t N = size();
     assert(N == x.size());
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] /= x(i);
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator+=(const std::integral auto x) -> MutPtrVector<T> {
+  auto operator+=(const std::integral auto x) -> V & {
     size_t N = size();
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] += x;
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator-=(const std::integral auto x) -> MutPtrVector<T> {
+  auto operator-=(const std::integral auto x) -> V & {
     size_t N = size();
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] -= x;
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator*=(const std::integral auto x) -> MutPtrVector<T> {
+  auto operator*=(const std::integral auto x) -> V & {
     size_t N = size();
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] *= x;
-    return *this;
+    return *static_cast<V *>(this);
   }
-  auto operator/=(const std::integral auto x) -> MutPtrVector<T> {
+  auto operator/=(const std::integral auto x) -> V & {
     size_t N = size();
     for (size_t i = 0; i < N; ++i)
       data()[i * stride()] /= x;
-    return *this;
+    return *static_cast<V *>(this);
   }
 };
 template <typename T, UnsignedIntConvertible I, SignedIntConvertible J>
 struct MutPtrVector : MutVectorCore<T, MutPtrVector<T, I, J>> {
   static_assert(!std::is_const_v<T>, "T shouldn't be const");
+  using Base = MutVectorCore<T, MutPtrVector<T, I, J>>;
+  using Base::operator+=, Base::operator-=, Base::operator*=, Base::operator/=,
+    Base::operator==, Base::operator(), Base::operator[],
+    Base::operator ::LinearAlgebra::PtrVector<T>, Base::view, Base::begin,
+    Base::end, Base::rbegin, Base::rend;
   using eltype = T;
   // using eltype = std::remove_const_t<T>;
   [[no_unique_address]] T *const mem;
   [[no_unique_address]] const I N;
   [[no_unique_address]] const J X;
   // constexpr MutPtrVector() = default;
-  // constexpr MutPtrVector(const MutPtrVector<T> &x) = default;
+  constexpr MutPtrVector(const MutPtrVector<T, I, J> &x) = default;
   // constexpr MutPtrVector(llvm::MutableArrayRef<T> x)
   //   : mem(x.data()), N(x.size()) {}
   // constexpr MutPtrVector(T *mem, size_t N) : mem(mem), N(N) {}
@@ -1186,12 +1219,33 @@ struct MutPtrVector : MutVectorCore<T, MutPtrVector<T, I, J>> {
   [[nodiscard]] constexpr auto size() const -> size_t { return N; }
   [[nodiscard]] constexpr auto rawSize() const -> I { return N; }
   [[nodiscard]] constexpr auto stride() const -> J { return X; }
+  constexpr operator PtrVector<T>() const {
+    return PtrVector(data(), size(), stride());
+  }
+  constexpr MutPtrVector(T *mem, I N, J X) : mem(mem), N(N), X(X) {}
+  constexpr MutPtrVector(T *mem, I N) : mem(mem), N(N) {
+    static_assert(std::is_same_v<J, Static<ptrdiff_t, 1>>);
+  }
+  auto operator=(const MutPtrVector<T, I, J> &x) -> MutPtrVector<T, I, J> {
+    if (this == &x)
+      return *this;
+    return copyto(*this, x);
+  }
+  auto operator=(const AbstractVector auto x) -> MutPtrVector<T, I, J> {
+    return copyto(*this, x);
+  }
+  auto operator=(T x) -> MutPtrVector<T, I, J> {
+    for (auto &&y : *this)
+      y = x;
+    return *this;
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<Static<ptrdiff_t, 1>>);
-static_assert(
-  std::is_trivially_copyable_v<MutPtrVector<int64_t, unsigned, ptrdiff_t>>);
-static_assert(std::is_trivially_copyable_v<MutPtrVector<int64_t, size_t, int>>);
+// static_assert(
+//   std::is_trivially_copyable_v<MutPtrVector<int64_t, unsigned, ptrdiff_t>>);
+// static_assert(std::is_trivially_copyable_v<MutPtrVector<int64_t, size_t,
+// int>>);
 // TODO: should be fixed with Clang 16?
 // https://reviews.llvm.org/D140664
 // static_assert(std::is_trivially_copyable_v<MutPtrVector<int64_t, size_t,
@@ -1203,29 +1257,39 @@ static_assert(
   sizeof(MutPtrVector<int64_t, Static<size_t, 12>, Static<ptrdiff_t, 12>>) ==
   sizeof(int64_t *));
 
+// Deduction guides
 template <typename T, IntConvertible I, IntConvertible J>
-PtrVector(T *, I, J) -> PtrVector<T, I, J>;
+PtrVector(T *, I, J)
+  -> PtrVector<std::remove_cv_t<T>, unsigned_type_t<I>, signed_type_t<J>>;
 template <typename T, IntConvertible I, IntConvertible J>
-MutPtrVector(T *, I, J) -> MutPtrVector<T, I, J>;
+MutPtrVector(T *, I, J)
+  -> MutPtrVector<T, unsigned_type_t<I>, signed_type_t<J>>;
+
+template <typename T, IntConvertible I>
+PtrVector(T *, I)
+  -> PtrVector<std::remove_cv_t<T>, unsigned_type_t<I>, Static<ptrdiff_t, 1>>;
+template <typename T, IntConvertible I>
+MutPtrVector(T *, I)
+  -> MutPtrVector<T, unsigned_type_t<I>, Static<ptrdiff_t, 1>>;
 
 //
 // Vectors
 //
 
 template <typename T> constexpr auto view(llvm::SmallVectorImpl<T> &x) {
-  return MutPtrVector<T>{x.data(), x.size()};
+  return MutPtrVector(x.data(), x.size(), Static<ptrdiff_t, 1>());
 }
 template <typename T> constexpr auto view(const llvm::SmallVectorImpl<T> &x) {
-  return PtrVector<T>{.mem = x.data(), .N = x.size()};
+  return PtrVector(x.data(), x.size(), Static<ptrdiff_t, 1>());
 }
 template <typename T> constexpr auto view(llvm::MutableArrayRef<T> x) {
-  return MutPtrVector<T>{x.data(), x.size()};
+  return MutPtrVector(x.data(), x.size(), Static<ptrdiff_t, 1>());
 }
 template <typename T> constexpr auto view(llvm::ArrayRef<T> x) {
-  return PtrVector<T>{.mem = x.data(), .N = x.size()};
+  return PtrVector(x.data(), x.size(), Static<ptrdiff_t, 1>());
 }
 
-template <typename T, IntConvertible I = unsigned> struct Vector {
+template <typename T> struct Vector {
   using eltype = T;
   [[no_unique_address]] llvm::SmallVector<T, 16> data;
 
@@ -1271,11 +1335,14 @@ template <typename T, IntConvertible I = unsigned> struct Vector {
   [[nodiscard]] constexpr auto begin() const { return data.begin(); }
   [[nodiscard]] constexpr auto end() const { return data.end(); }
   [[nodiscard]] constexpr auto size() const -> size_t { return data.size(); }
+  [[nodiscard]] static constexpr auto stride() -> Static<ptrdiff_t, 1> {
+    return {};
+  }
   // MutPtrVector<T> view() {
   //     return MutPtrVector<T>{.mem = data.data(), .N = data.size()};
   // };
   [[nodiscard]] constexpr auto view() const -> PtrVector<T> {
-    return PtrVector<T>{.mem = data.data(), .N = data.size()};
+    return PtrVector<T>(data.data(), data.size(), Static<ptrdiff_t, 1>());
   };
   template <typename A> void push_back(A &&x) {
     data.push_back(std::forward<A>(x));
@@ -1293,10 +1360,10 @@ template <typename T, IntConvertible I = unsigned> struct Vector {
   void resizeForOverwrite(size_t N) { data.resize_for_overwrite(N); }
 
   constexpr operator MutPtrVector<T>() {
-    return MutPtrVector<T>{data.data(), data.size()};
+    return MutPtrVector(data.data(), data.size(), Static<ptrdiff_t, 1>());
   }
   constexpr operator PtrVector<T>() const {
-    return PtrVector<T>{.mem = data.data(), .N = data.size()};
+    return PtrVector(data.data(), data.size(), Static<ptrdiff_t, 1>());
   }
   constexpr operator llvm::MutableArrayRef<T>() {
     return llvm::MutableArrayRef<T>{data.data(), data.size()};
@@ -1388,11 +1455,11 @@ concept DerivedMatrix =
     { t.rowStride() } -> IsRowStride;
   };
 
-template <typename T, IntConvertible I = unsigned, IntConvertible J = unsigned,
-          IntConvertible K = int>
+template <typename T, IntConvertible I = size_t, IntConvertible J = size_t,
+          IntConvertible K = size_t>
 struct PtrMatrix;
-template <typename T, IntConvertible I = unsigned, IntConvertible J = unsigned,
-          IntConvertible K = int>
+template <typename T, IntConvertible I = size_t, IntConvertible J = size_t,
+          IntConvertible K = size_t>
 struct MutPtrMatrix;
 
 template <typename T>
@@ -1400,12 +1467,9 @@ concept ScalarRowIndex = ScalarIndex<T> || IsRow<T>;
 template <typename T>
 concept ScalarColIndex = ScalarIndex<T> || IsCol<T>;
 
-constexpr auto unwrapRow(IsRow auto x) -> size_t { return size_t(x); }
-constexpr auto unwrapCol(IsCol auto x) -> size_t { return size_t(x); }
-constexpr auto unwrapRow(auto x) { return x; }
-constexpr auto unwrapCol(auto x) { return x; }
-constexpr auto unwrap(RowOrCol auto x) { return *x; }
-constexpr auto unwrap(auto x) { return x; }
+template <typename T> using StridedVector = PtrVector<T, size_t, ptrdiff_t>;
+template <typename T>
+using MutStridedVector = MutPtrVector<T, size_t, ptrdiff_t>;
 
 template <typename T>
 constexpr inline auto
@@ -1437,7 +1501,7 @@ template <typename T>
 concept AbstractSlice = requires(T t, size_t M) {
                           {
                             canonicalizeRange(t, M)
-                            } -> std::same_as<Range<size_t, size_t>>;
+                            } -> std::convertible_to<Range<size_t, size_t>>;
                         };
 
 template <typename T>
@@ -1448,9 +1512,10 @@ inline constexpr auto matrixGet(const T *ptr, IsRow auto M, IsCol auto N,
   checkIndex(size_t(M), m);
   checkIndex(size_t(N), n);
 #endif
-  IsRange auto mr = canonicalizeRange(m, M);
-  IsRange auto nr = canonicalizeRange(n, N);
-  return PtrMatrix<T>{ptr + nr.b + X * mr.b, mr.e - mr.b, nr.e - nr.b, X};
+  IsRange auto mr = canonicalizeRange(m, unwrap(M));
+  IsRange auto nr = canonicalizeRange(n, unwrap(N));
+  return PtrMatrix(ptr + nr.b + X * mr.b, toRow(mr.e - mr.b),
+                   toCol(nr.e - nr.b), X);
 }
 template <typename T>
 inline constexpr auto matrixGet(T *ptr, IsRow auto M, IsCol auto N,
@@ -1460,11 +1525,10 @@ inline constexpr auto matrixGet(T *ptr, IsRow auto M, IsCol auto N,
   checkIndex(size_t(M), m);
   checkIndex(size_t(N), n);
 #endif
-  IsRange auto mr = canonicalizeRange(m, M);
-  IsRange auto nr = canonicalizeRange(n, N);
-  return MutPtrMatrix<T>{ptr + nr.b + X * mr.b,
-                         axis<AxisType::Row>(mr.e - mr.b),
-                         axis<AxisType::Column>(nr.e - nr.b), X};
+  IsRange auto mr = canonicalizeRange(m, unwrap(M));
+  IsRange auto nr = canonicalizeRange(n, unwrap(N));
+  return MutPtrMatrix(ptr + nr.b + X * mr.b, toRow(mr.e - mr.b),
+                      toCol(nr.e - nr.b), X);
 }
 
 template <typename T>
@@ -1478,8 +1542,8 @@ inline constexpr auto matrixGet(const T *ptr, IsRow auto M, IsCol auto N,
   checkIndex(size_t(N), n);
 #endif
   size_t mi = canonicalize(m, size_t(M));
-  IsRange auto nr = canonicalizeRange(n, size_t(N));
-  return PtrVector(ptr + nr.b + X * mi, nr.e - nr.b);
+  IsRange auto nr = canonicalizeRange(n, unwrap(N));
+  return PtrVector(ptr + nr.b + X * mi, nr.e - nr.b, Static<ptrdiff_t, 1>());
 }
 template <typename T>
 inline constexpr auto
@@ -1491,8 +1555,8 @@ matrixGet(T *ptr, IsRow auto M, IsCol auto N, IsRowStride auto X,
   checkIndex(size_t(N), n);
 #endif
   size_t mi = canonicalize(m, size_t(M));
-  Range<size_t, size_t> nr = canonicalizeRange(n, size_t(N));
-  return MutPtrVector(ptr + nr.b + X * mi, nr.e - nr.b);
+  Range<size_t, size_t> nr = canonicalizeRange(n, unwrap(N));
+  return MutPtrVector(ptr + nr.b + X * mi, nr.e - nr.b, Static<ptrdiff_t, 1>());
 }
 
 template <typename T>
@@ -1504,9 +1568,9 @@ inline constexpr auto matrixGet(const T *ptr, IsRow auto M, IsCol auto N,
   checkIndex(size_t(M), m);
   checkIndex(size_t(N), n);
 #endif
-  IsRange auto mr = canonicalizeRange(m, size_t(M));
+  IsRange auto mr = canonicalizeRange(m, unwrap(M));
   size_t ni = canonicalize(n, size_t(N));
-  return PtrVector{ptr + ni + X * mr.b, mr.e - mr.b, X};
+  return PtrVector(ptr + ni + X * mr.b, mr.e - mr.b, *X);
 }
 template <typename T>
 inline constexpr auto matrixGet(T *ptr, IsRow auto M, IsCol auto N,
@@ -1517,30 +1581,34 @@ inline constexpr auto matrixGet(T *ptr, IsRow auto M, IsCol auto N,
   checkIndex(size_t(M), m);
   checkIndex(size_t(N), n);
 #endif
-  Range<size_t, size_t> mr = canonicalizeRange(m, size_t(M));
+  Range<size_t, size_t> mr = canonicalizeRange(m, unwrap(M));
   size_t ni = canonicalize(n, size_t(N));
-  return MutPtrVector<T>{ptr + ni + X * mr.b, mr.e - mr.b, X};
+  return MutPtrVector(ptr + ni + X * mr.b, mr.e - mr.b, *X);
 }
 
 constexpr auto isSquare(const AbstractMatrix auto &A) -> bool {
   return A.numRow() == A.numCol();
 }
 
-template <typename T> constexpr auto diag(MutPtrMatrix<T> A) {
-  return MutPtrVector{A.data(), A.minRowCol(),
-                      A.rowStride() + Static<ptrdiff_t, 1>()};
+template <typename T, IntConvertible I, IntConvertible J, IntConvertible K>
+constexpr auto diag(MutPtrMatrix<T, I, J, K> A) {
+  return MutPtrVector(A.data(), A.minRowCol(),
+                      (*A.rowStride()) + Static<ptrdiff_t, 1>());
 }
-template <typename T> constexpr auto diag(PtrMatrix<T> A) {
-  return PtrVector{A.data(), A.minRowCol(),
-                   A.rowStride() + Static<ptrdiff_t, 1>()};
+template <typename T, IntConvertible I, IntConvertible J, IntConvertible K>
+constexpr auto diag(PtrMatrix<T, I, J, K> A) {
+  return PtrVector(A.data(), A.minRowCol(),
+                   (*A.rowStride()) + Static<ptrdiff_t, 1>());
 }
-template <typename T> constexpr auto antiDiag(MutPtrMatrix<T> A) {
-  return MutPtrVector{A.data() + size_t(A.numCol()) - 1, A.minRowCol(),
-                      (A.rowStride() - Static<ptrdiff_t, 1>())};
+template <typename T, IntConvertible I, IntConvertible J, IntConvertible K>
+constexpr auto antiDiag(MutPtrMatrix<T, I, J, K> A) {
+  return MutPtrVector(A.data() + size_t(A.numCol()) - 1, A.minRowCol(),
+                      ((*A.rowStride()) - Static<ptrdiff_t, 1>()));
 }
-template <typename T> constexpr auto antiDiag(PtrMatrix<T> A) {
-  return PtrVector{A.data() + size_t(A.numCol()) - 1, A.minRowCol(),
-                   (A.rowStride() - Static<ptrdiff_t, 1>())};
+template <typename T, IntConvertible I, IntConvertible J, IntConvertible K>
+constexpr auto antiDiag(PtrMatrix<T, I, J, K> A) {
+  return PtrVector(A.data() + size_t(A.numCol()) - 1, A.minRowCol(),
+                   ((*A.rowStride()) - Static<ptrdiff_t, 1>()));
 }
 
 /// A CRTP type defining const methods for matrices.
@@ -1631,7 +1699,7 @@ template <typename T, typename A> struct MutMatrixCore {
   // }
 };
 
-template <typename T, IntConvertible I = unsigned, IntConvertible J = unsigned,
+template <typename T, IntConvertible I = size_t, IntConvertible J = size_t,
           size_t S = 64>
 struct Matrix;
 
@@ -1667,7 +1735,7 @@ struct PtrMatrix : ConstMatrixCore<T, PtrMatrix<T, I, J, K>> {
   }
   constexpr PtrMatrix(const T *const mem, const IsRow auto M,
                       const IsCol auto N, const IsRowStride auto X)
-    : mem(mem), M(M), N(N), X(X) {}
+    : mem(mem), M(*M), N(*N), X(*X) {}
   constexpr void extendOrAssertSize(IsRow auto MM, IsCol auto NN) const {
     assert(MM == M);
     assert(NN == N);
@@ -1684,6 +1752,7 @@ struct MutPtrMatrix : ConstMatrixCore<T, MutPtrMatrix<T, I, J, K>>,
   using CBase::antiDiag, MBase::antiDiag;
   using CBase::diag, MBase::diag;
   using CBase::operator(), MBase::operator();
+
   using CBase::size, CBase::view, CBase::isSquare, CBase::transpose,
     CBase::operator ::LinearAlgebra::PtrMatrix<T, I, J, J>,
     MBase::operator ::LinearAlgebra::MutPtrMatrix<T, I, J, J>;
@@ -1703,18 +1772,14 @@ struct MutPtrMatrix : ConstMatrixCore<T, MutPtrMatrix<T, I, J, K>>,
   [[nodiscard]] constexpr auto numCol() const { return toCol(N); }
   [[nodiscard]] constexpr auto rowStride() const { return toRowStride(X); }
   [[nodiscard]] constexpr auto view() const -> PtrMatrix<T> {
-    return PtrMatrix<T>(data(), M, N, X);
+    return PtrMatrix<T>(data(), numRow(), numCol(), rowStride());
   };
   constexpr operator PtrMatrix<T>() const {
-    return PtrMatrix<T>(data(), M, N, X);
+    return PtrMatrix<T>(data(), numRow(), numCol(), rowStride());
   }
-  template <size_t S>
-  MutPtrMatrix(Matrix<T, I, J, S> &mat)
-    : mem(*mat.data()), M(*mat.numRow()), N(*mat.numCol()),
-      X(*mat.rowStride()) {}
-  MutPtrMatrix(Matrix<T, I, J, 64> &mat)
-    : mem(*mat.data()), M(*mat.numRow()), N(*mat.numCol()),
-      X(*mat.rowStride()) {}
+  // template <typename ARM>
+  // constexpr MutPtrMatrix(ARM &A)
+  //   : mem(A.data()), M(*A.numRow()), N(*A.numCol()), X(*A.rowStride()) {}
 
   auto operator=(const SmallSparseMatrix<T> &A) -> MutPtrMatrix<T> {
     assert(M == A.numRow());
@@ -1737,7 +1802,7 @@ struct MutPtrMatrix : ConstMatrixCore<T, MutPtrMatrix<T, I, J, K>>,
     return copyto(*this, PtrMatrix<T>(A));
   }
   // rule of 5 requires...
-  // constexpr MutPtrMatrix(const MutPtrMatrix<T> &A) = default;
+  constexpr MutPtrMatrix(const MutPtrMatrix<T, I, J, K> &A) = default;
   constexpr MutPtrMatrix(T *mem, IsRow auto MM, IsCol auto NN)
     : mem(mem), M(*MM), N(*NN), X(*NN){};
   constexpr MutPtrMatrix(T *mem, IsRow auto MM, IsCol auto NN,
@@ -1804,30 +1869,10 @@ template <typename T> constexpr auto ptrVector(T *p, size_t M) {
     return MutPtrVector<T>{p, M};
 }
 
-template <typename T> PtrMatrix(T *, size_t, size_t) -> PtrMatrix<T>;
-template <typename T> MutPtrMatrix(T *, size_t, size_t) -> MutPtrMatrix<T>;
-template <typename T> PtrMatrix(T *, size_t, size_t, size_t) -> PtrMatrix<T>;
-template <typename T>
-MutPtrMatrix(T *, size_t, size_t, size_t) -> MutPtrMatrix<T>;
-
-template <AbstractRowMajorMatrix T> PtrMatrix(T &A) -> PtrMatrix<eltype_t<T>>;
-template <AbstractRowMajorMatrix T>
-MutPtrMatrix(T &A) -> MutPtrMatrix<eltype_t<T>>;
-
-// template <typename T>
-// constexpr auto ptrmat(T *ptr, size_t numRow, size_t numCol, size_t stride) {
-//     if constexpr (std::is_const_v<T>) {
-//         return PtrMatrix<std::remove_const_t<T>>{
-//             .mem = ptr, .M = numRow, .N = numCol, .X = stride};
-//     } else {
-//         return MutPtrMatrix<T>{
-//             .mem = ptr, .M = numRow, .N = numCol, .X = stride};
-//     }
-// }
-static_assert(sizeof(PtrMatrix<int64_t>) <=
-              4 * sizeof(unsigned int) + sizeof(int64_t *));
-static_assert(sizeof(MutPtrMatrix<int64_t>) <=
-              4 * sizeof(unsigned int) + sizeof(int64_t *));
+static_assert(sizeof(PtrMatrix<int64_t>) ==
+              3 * sizeof(size_t) + sizeof(int64_t *));
+static_assert(sizeof(MutPtrMatrix<int64_t>) ==
+              3 * sizeof(size_t) + sizeof(int64_t *));
 static_assert(std::is_trivially_copyable_v<Row<>>);
 static_assert(std::is_trivially_copyable_v<Col<Static<size_t, 3>>>);
 static_assert(std::is_trivially_copyable_v<RowStride<ptrdiff_t>>);
@@ -1901,7 +1946,7 @@ concept IntVector = requires(T t, int64_t y) {
                       { t[y] } -> std::convertible_to<int64_t>;
                     };
 
-template <typename T, IntConvertible I>
+template <typename T, IntConvertible I = size_t>
 struct SquarePtrMatrix : ConstMatrixCore<T, SquarePtrMatrix<T, I>> {
   using Base = ConstMatrixCore<T, SquarePtrMatrix<T, I>>;
   using Base::diag, Base::antiDiag,
@@ -1920,7 +1965,7 @@ struct SquarePtrMatrix : ConstMatrixCore<T, SquarePtrMatrix<T, I>> {
   [[nodiscard]] constexpr auto data() const -> const T * { return mem; }
 };
 
-template <typename T, IntConvertible I>
+template <typename T, IntConvertible I = size_t>
 struct MutSquarePtrMatrix : ConstMatrixCore<T, MutSquarePtrMatrix<T, I>>,
                             MutMatrixCore<T, MutSquarePtrMatrix<T, I>> {
   using CBase = ConstMatrixCore<T, MutSquarePtrMatrix<T, I>>;
@@ -2019,10 +2064,10 @@ struct Matrix : ConstMatrixCore<T, Matrix<T, I, J, S>>,
   constexpr auto data() -> T * { return mem.data(); }
   [[nodiscard]] constexpr auto data() const -> const T * { return mem.data(); }
   Matrix(llvm::SmallVector<T, S> content, IsRow auto M, IsCol auto N)
-    : mem(std::move(content)), M(*M), N(*N), X(rowStride(*N)){};
+    : mem(std::move(content)), M(*M), N(*N), X(*N){};
 
   Matrix(IsRow auto M, IsCol auto N)
-    : mem(llvm::SmallVector<T, S>(M * N)), M(*M), N(*N), X(rowStride(*N)){};
+    : mem(llvm::SmallVector<T, S>(M * N)), M(*M), N(*N), X(*N){};
 
   Matrix() = default;
   Matrix(SquareMatrix<T, I> &&A)
@@ -2047,17 +2092,17 @@ struct Matrix : ConstMatrixCore<T, Matrix<T, I, J, S>>,
   [[nodiscard]] constexpr auto numCol() const { return toCol(N); }
   [[nodiscard]] constexpr auto rowStride() const { return toRowStride(X); }
 
-  operator MutPtrMatrix<T, I, J, J>() { return {mem.data(), M, N, X}; }
+  // operator MutPtrMatrix<T, I, J, J>() { return {mem.data(), M, N, X}; }
 
   static auto uninitialized(Row<I> MM, Col<J> NN) -> Matrix<T, I, J, S> {
-    Matrix<T, I, J, S> A(0, 0);
+    Matrix<T, I, J, S> A(toRow(0), toCol(0));
     A.M = MM;
     A.X = A.N = NN;
     A.mem.resize_for_overwrite(MM * NN);
     return A;
   }
   static auto identity(size_t MM) -> Matrix<T, I, J, S> {
-    Matrix<T, I, J, S> A(MM, MM);
+    Matrix<T, I, J, S> A(toRow(MM), toCol(MM));
     for (size_t i = 0; i < MM; ++i)
       A(i, i) = 1;
     return A;
@@ -2108,10 +2153,12 @@ struct Matrix : ConstMatrixCore<T, Matrix<T, I, J, S>>,
     X = *XX;
     N = *NN;
   }
-  void resize(Row<I> MM, Col<J> NN) { resize(MM, NN, max(NN, X)); }
-  void reserve(Row<I> MM, Col<J> NN) { reserve(MM, max(NN, X)); }
+  void resize(Row<I> MM, Col<J> NN) { resize(MM, NN, max(NN, rowStride())); }
+  void reserve(Row<I> MM, Col<J> NN) { reserve(MM, max(NN, rowStride())); }
   void reserve(Row<I> MM, RowStride<J> NN) { mem.reserve(NN * MM); }
-  void clearReserve(Row<I> MM, Col<J> NN) { clearReserve(MM, rowStride(*NN)); }
+  void clearReserve(Row<I> MM, Col<J> NN) {
+    clearReserve(MM, toRowStride(*NN));
+  }
   void clearReserve(Row<I> MM, RowStride<J> XX) {
     clear();
     mem.reserve(XX * MM);
@@ -2201,13 +2248,27 @@ struct Matrix : ConstMatrixCore<T, Matrix<T, I, J, S>>,
     }
     return A;
   }
+  constexpr void extendOrAssertSize(IsRow auto MM, IsCol auto NN) const {
+    resize(MM, NN);
+  }
 };
+
+// Deduction guides
 template <typename T, IntConvertible I, IntConvertible J, size_t S>
 PtrMatrix(Matrix<T, I, J, S> const &) -> PtrMatrix<T, I, J, J>;
 template <typename T, IntConvertible I, IntConvertible J, size_t S>
 PtrMatrix(Matrix<T, I, J, S> &) -> PtrMatrix<T, I, J, J>;
 template <typename T, IntConvertible I, IntConvertible J, size_t S>
 MutPtrMatrix(Matrix<T, I, J, S> &) -> MutPtrMatrix<T, I, J, J>;
+template <typename T> PtrMatrix(T *, size_t, size_t) -> PtrMatrix<T>;
+template <typename T> MutPtrMatrix(T *, size_t, size_t) -> MutPtrMatrix<T>;
+template <typename T> PtrMatrix(T *, size_t, size_t, size_t) -> PtrMatrix<T>;
+template <typename T>
+MutPtrMatrix(T *, size_t, size_t, size_t) -> MutPtrMatrix<T>;
+
+template <AbstractRowMajorMatrix T> PtrMatrix(T &A) -> PtrMatrix<eltype_t<T>>;
+template <AbstractRowMajorMatrix T>
+MutPtrMatrix(T &A) -> MutPtrMatrix<eltype_t<T>>;
 
 // template <typename T, IntConvertible I, IntConvertible J>
 // PtrMatrix(Matrix<T, I, J, 64> const &) -> PtrMatrix<T, I, J, J>;
@@ -2278,7 +2339,8 @@ auto printVector(llvm::raw_ostream &os, PtrVector<T, I, J> a)
 template <typename T>
 auto printVector(llvm::raw_ostream &os, const llvm::SmallVectorImpl<T> &a)
   -> llvm::raw_ostream & {
-  return printVector(os, PtrVector<T>{a.data(), a.size()});
+  return printVector(os,
+                     PtrVector<T>{a.data(), a.size(), Static<ptrdiff_t, 1>{}});
 }
 
 template <typename T>
@@ -2754,4 +2816,6 @@ using LinearAlgebra::AbstractVector, LinearAlgebra::AbstractMatrix,
   LinearAlgebra::SquareMatrix, LinearAlgebra::MutSquarePtrMatrix,
   LinearAlgebra::Range, LinearAlgebra::begin, LinearAlgebra::end,
   LinearAlgebra::swap, LinearAlgebra::SquarePtrMatrix, LinearAlgebra::Row,
-  LinearAlgebra::RowStride, LinearAlgebra::Col;
+  LinearAlgebra::RowStride, LinearAlgebra::Col, LinearAlgebra::toRow,
+  LinearAlgebra::toRowStride, LinearAlgebra::toCol,
+  LinearAlgebra::StridedVector, LinearAlgebra::MutStridedVector;

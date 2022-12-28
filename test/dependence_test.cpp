@@ -805,7 +805,7 @@ TEST(TriangularExampleTest, BasicAssertions) {
   std::optional<BitSet<>> optDeps = lblock.optimize();
   EXPECT_TRUE(optDeps.has_value());
   // orig order (inner <-> outer): n, m
-  IntMatrix optPhi2(2, 2);
+  IntMatrix optPhi2(toRow(2), toCol(2));
   // phi2 loop order is
   optPhi2.diag() = 1;
   // the scheduler swaps the order, making `n` outermost,
@@ -1409,7 +1409,7 @@ TEST(DoubleDependenceTest, BasicAssertions) {
       llvm::errs() << m << ", ";
     llvm::errs() << "\n";
   }
-  IntMatrix optPhi(2, 2);
+  IntMatrix optPhi(toRow(2), toCol(2));
   optPhi(0, _) = 1;
   optPhi(1, _) = std::numeric_limits<int64_t>::min();
   // Graphs::print(iOuterLoopNest.fullGraph());

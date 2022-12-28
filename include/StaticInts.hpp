@@ -155,6 +155,9 @@ template <std::signed_integral T> struct UnsignedType<T> {
 template <typename T> using signed_type_t = typename SignedType<T>::type;
 template <typename T> using unsigned_type_t = typename UnsignedType<T>::type;
 
+static_assert(std::same_as<signed_type_t<size_t>, ptrdiff_t>);
+static_assert(std::same_as<unsigned_type_t<ptrdiff_t>, size_t>);
+
 template <typename T, T U> constexpr auto signedOf(Static<T, U>) {
   using I = std::make_signed_t<T>;
   return Static<I, I(U)>{};

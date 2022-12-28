@@ -22,7 +22,7 @@ TEST(OrthogonalizationTest, BasicAssertions) {
   size_t luFailedCount = 0;
   size_t invFailedCount = 0;
   size_t numIters = 1000;
-  IntMatrix B(Row{4}, Col{8});
+  IntMatrix B(toRow(4), toCol(8));
   SquareMatrix<int64_t> I4 = SquareMatrix<int64_t>::identity(4);
   for (size_t i = 0; i < numIters; ++i) {
     for (size_t n = 0; n < 4; ++n)
@@ -151,7 +151,7 @@ auto isHNF(PtrMatrix<int64_t> A) -> bool {
 // NOLINTNEXTLINE(modernize-use-trailing-return-type)
 TEST(Hermite, BasicAssertions) {
   {
-    IntMatrix A4x3(Row{4}, Col{3});
+    IntMatrix A4x3(toRow(4), toCol(3));
     A4x3(0, 0) = 2;
     A4x3(1, 0) = 3;
     A4x3(2, 0) = 6;
@@ -234,7 +234,7 @@ TEST(Hermite, BasicAssertions) {
     EXPECT_TRUE(H3 == U3 * A);
   }
   {
-    IntMatrix A(Row{2}, Col{3});
+    IntMatrix A(toRow(2), toCol(3));
     A(0, 0) = -3;
     A(0, 1) = -1;
     A(0, 2) = 1;
@@ -250,7 +250,7 @@ TEST(Hermite, BasicAssertions) {
     llvm::errs() << "A = \n" << A << "\nH =\n" << H << "\nU =\n" << U << "\n";
   }
   {
-    IntMatrix A(Row{3}, Col{11});
+    IntMatrix A(toRow(3), toCol(11));
     A(0, 0) = 3;
     A(0, 1) = 3;
     A(0, 2) = -3;
@@ -302,7 +302,7 @@ TEST(NullSpaceTests, BasicAssertions) {
   // size_t numIters = 1000;
   size_t numIters = 1;
   for (size_t numCol = 2; numCol < 11; numCol += 2) {
-    IntMatrix B(Row{8}, Col{numCol});
+    IntMatrix B(toRow(8), toCol(numCol));
     size_t nullDim = 0;
     IntMatrix Z, NS;
     for (size_t i = 0; i < numIters; ++i) {

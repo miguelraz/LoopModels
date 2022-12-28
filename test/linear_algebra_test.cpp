@@ -30,7 +30,7 @@ TEST(LinearAlgebraTest, BasicAssertions) {
   EXPECT_TRUE(LUFopt.has_value());
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
   auto &LUF = *LUFopt;
-  Matrix<Rational, 0, 0> B = A;
+  Matrix<Rational> B = A;
   llvm::errs() << "A = \n" << A << "\nB = \n" << B << "\n";
   LinearAlgebra::printVector(llvm::errs() << "F = \n"
                                           << LUF.F << "\nperm = \n",

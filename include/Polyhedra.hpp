@@ -100,9 +100,9 @@ struct Polyhedra {
   auto calcIsEmpty() -> bool { return C.isEmpty(); }
   void pruneBounds() {
     if (calcIsEmpty()) {
-      A.truncate(Row{0});
+      A.truncate(toRow(0));
       if constexpr (hasEqualities)
-        E.truncate(Row{0});
+        E.truncate(toRow(0));
     } else
       pruneBoundsUnchecked();
   }
@@ -250,8 +250,8 @@ struct Polyhedra {
   }
   void truncateVars(size_t numVar) {
     if constexpr (hasEqualities)
-      E.truncate(Col{numVar});
-    A.truncate(Col{numVar});
+      E.truncate(toCol(numVar));
+    A.truncate(toCol(numVar));
   }
 };
 

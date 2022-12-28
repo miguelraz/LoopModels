@@ -406,7 +406,7 @@ public:
     // IntMatrix R(numLoops, subscripts.size());
     size_t numPeeled = L->getLoopDepth() - numLoops;
     // numLoops x arrayDim
-    IntMatrix Rt(subscripts.size(), numLoops);
+    IntMatrix Rt(toRow(subscripts.size()), toCol(numLoops));
     IntMatrix Bt;
     llvm::SmallVector<const llvm::SCEV *, 3> symbolicOffsets;
     uint64_t blackList{0};
@@ -450,13 +450,13 @@ public:
         if (size_t j = findSymbolicIndex(symbolicOffsets, S)) {
           Bt(_, j) += Rt(_, i);
         } else {
-          Col N = Bt.numCol();
+          Col<> N = Bt.numCol();
           Bt.resize(N + 1);
           Bt(_, N) = Rt(_, i);
           symbolicOffsets.push_back(S);
         }
       }
-      Rt.truncate(Col{numLoops - numExtraLoopsToPeel});
+      Rt.truncate(toCol(numLoops - numExtraLoopsToPeel));
     }
     LT.memAccesses.emplace_back(basePointer, aln, loadOrStore, std::move(sizes),
                                 std::move(symbolicOffsets), omegas);

@@ -40,8 +40,8 @@ orthogonalize(llvm::SmallVectorImpl<ArrayReference *> const &ai)
   size_t numRow = 0;
   for (auto a : ai)
     numRow += a->getArrayDim();
-  IntMatrix S(numLoops, numRow);
-  Col i = 0;
+  IntMatrix S(toRow(numLoops), toCol(numRow));
+  Col<> i = 0;
   for (auto a : ai) {
     PtrMatrix<int64_t> A = a->indexMatrix();
     for (size_t j = 0; j < numLoops; ++j)
@@ -69,7 +69,7 @@ orthogonalize(llvm::SmallVectorImpl<ArrayReference *> const &ai)
   newArrayRefs.reserve(numRow);
   i = 0;
   for (auto a : ai) {
-    Col j = i + a->getArrayDim();
+    Col<> j = i + a->getArrayDim();
     newArrayRefs.emplace_back(*a, &ret.first, KS(_, _(i, j)));
     EXPECT_EQ(newArrayRefs.back().indexMatrix(), KS(_, _(i, j)));
     i = j;
@@ -305,8 +305,8 @@ TEST(OrthogonalizeMatricesTest, BasicAssertions) {
 
   const size_t M = 7;
   const size_t N = 7;
-  IntMatrix A(M, N);
-  IntMatrix B(N, N);
+  IntMatrix A(toRow(M), toCol(N));
+  IntMatrix B(toRow(N), toCol(N));
   const size_t iters = 1000;
   for (size_t i = 0; i < iters; ++i) {
     for (auto &&a : A)

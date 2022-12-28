@@ -67,23 +67,23 @@ struct MemoryAccess {
   // getNumLoops() x arrayDim()
   [[nodiscard]] auto indexMatrix() -> MutPtrMatrix<int64_t> {
     const size_t d = getArrayDim();
-    return MutPtrMatrix<int64_t>{indices.data(), getNumLoops(), d, d};
+    return {indices.data(), toRow(getNumLoops()), toCol(d), toRowStride(d)};
   }
   [[nodiscard]] auto indexMatrix() const -> PtrMatrix<int64_t> {
     const size_t d = getArrayDim();
-    return PtrMatrix<int64_t>{indices.data(), getNumLoops(), d, d};
+    return {indices.data(), toRow(getNumLoops()), toCol(d), toRowStride(d)};
   }
   [[nodiscard]] auto offsetMatrix() -> MutPtrMatrix<int64_t> {
     const size_t d = getArrayDim();
     const size_t numSymbols = getNumSymbols();
-    return MutPtrMatrix<int64_t>{indices.data() + getNumLoops() * d, d,
-                                 numSymbols, numSymbols};
+    return {indices.data() + getNumLoops() * d, toRow(d), toCol(numSymbols),
+            toRowStride(numSymbols)};
   }
   [[nodiscard]] auto offsetMatrix() const -> PtrMatrix<int64_t> {
     const size_t d = getArrayDim();
     const size_t numSymbols = getNumSymbols();
-    return PtrMatrix<int64_t>{indices.data() + getNumLoops() * d, d, numSymbols,
-                              numSymbols};
+    return {indices.data() + getNumLoops() * d, toRow(d), toCol(numSymbols),
+            toRowStride(numSymbols)};
   }
   [[nodiscard]] auto getInstruction() -> llvm::Instruction * {
     return loadOrStore;

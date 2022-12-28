@@ -793,8 +793,8 @@ struct LinearProgramLoopBlock {
     // constexpr size_t numOmega =
     //     DependencePolyhedra::getNumOmegaCoefficients();
     size_t w = 1 + numBounding;
-    Row c = 0;
-    Col l = getLambdaOffset(), u = 1;
+    Row<> c = 0;
+    Col<> l = getLambdaOffset(), u = 1;
     for (size_t e = 0; e < edges.size(); ++e) {
       Dependence &edge = edges[e];
       if (g.isInactive(e, d))
@@ -811,18 +811,18 @@ struct LinearProgramLoopBlock {
         for (auto inNodeIndex : inNodeIndexSet) {
           const ScheduledNode &inNode = nodes[inNodeIndex];
 
-          Row cc = c + numSatConstraints;
-          Row ccc = cc + numBndConstraints;
+          Row<> cc = c + numSatConstraints;
+          Row<> ccc = cc + numBndConstraints;
 
-          Col ll = l + satL.numCol();
-          Col lll = ll + bndL.numCol();
+          Col<> ll = l + satL.numCol();
+          Col<> lll = ll + bndL.numCol();
           C(_(c, cc), _(l, ll)) = satL;
           C(_(cc, ccc), _(ll, lll)) = bndL;
           l = lll;
 
           // bounding
           C(_(cc, ccc), w++) = bndWU(_, 0);
-          Col uu = u + bndWU.numCol() - 1;
+          Col<> uu = u + bndWU.numCol() - 1;
           C(_(cc, ccc), _(u, uu)) = bndWU(_, _(1, end));
           u = uu;
           if (satisfyDeps)
@@ -866,7 +866,7 @@ struct LinearProgramLoopBlock {
                 C(_(cc, ccc), 0) -= bndPc * schC + bndPp * schP;
               } else if (satPc.numCol() < satPp.numCol()) {
                 auto phiChild = outNode.getPhiOffset();
-                Col P = satPc.numCol();
+                Col<> P = satPc.numCol();
                 auto m = phiChild - P;
                 C(_(c, cc), _(phiChild - satPp.numCol(), m)) =
                   satPp(_, _(begin, end - P));
@@ -877,7 +877,7 @@ struct LinearProgramLoopBlock {
                   bndPc + bndPp(_, _(end - P, end));
               } else /* if (satPc.numCol() > satPp.numCol()) */ {
                 auto phiChild = outNode.getPhiOffset();
-                Col P = satPp.numCol();
+                Col<> P = satPp.numCol();
                 auto m = phiChild - P;
                 C(_(c, cc), _(phiChild - satPc.numCol(), m)) =
                   satPc(_, _(begin, end - P));
@@ -913,7 +913,7 @@ struct LinearProgramLoopBlock {
   }
   void updateConstraints(MutPtrMatrix<int64_t> C, const ScheduledNode &node,
                          PtrMatrix<int64_t> sat, PtrMatrix<int64_t> bnd,
-                         size_t d, Row c, Row cc, Row ccc) {
+                         size_t d, Row<> c, Row<> cc, Row<> ccc) {
     if (node.phiIsScheduled(d)) {
       // add it constants
       auto sch = node.getSchedule(d);
@@ -938,9 +938,10 @@ struct LinearProgramLoopBlock {
       if (g.isInactive(e, d))
         continue;
       const Dependence &edge = edges[e];
-      Col uu = u + edge.dependenceBounding.getConstraints().numCol() -
-               (2 + edge.depPoly.getNumLambda() + edge.getNumPhiCoefficients() +
-                edge.getNumOmegaCoefficients());
+      Col<> uu =
+        u + edge.dependenceBounding.getConstraints().numCol() -
+        (2 + edge.depPoly.getNumLambda() + edge.getNumPhiCoefficients() +
+         edge.getNumOmegaCoefficients());
       if ((sol(w++) != 0) || (!(allZero(sol(_(u, uu)))))) {
         g.activeEdges.remove(e);
         deactivated.insert(e);

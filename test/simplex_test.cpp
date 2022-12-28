@@ -8,7 +8,7 @@
 // NOLINTNEXTLINE(modernize-use-trailing-return-type)
 TEST(SimplexTest, BasicAssertions) {
   IntMatrix A{"[10 3 2 1; 15 2 5 3]"_mat};
-  IntMatrix B{0, 4};
+  IntMatrix B{toRow(0), toCol(4)};
   std::optional<Simplex> optS{Simplex::positiveVariables(A, B)};
   EXPECT_TRUE(optS.has_value());
   assert(optS.has_value());

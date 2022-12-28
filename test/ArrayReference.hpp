@@ -11,8 +11,8 @@ struct ArrayReference {
   IntMatrix offMat;
   llvm::SmallVector<const llvm::SCEV *, 3> sizes;
   ArrayReference(const llvm::SCEVUnknown *p, AffineLoopNest<> &l, size_t dim)
-    : basePointer(p), loop(&l), indMat(loop->getNumLoops(), dim),
-      offMat(dim, 1), sizes(dim) {}
+    : basePointer(p), loop(&l), indMat(toRow(loop->getNumLoops()), toCol(dim)),
+      offMat(toRow(dim), toCol(1)), sizes(dim) {}
   ArrayReference(const ArrayReference &other, AffineLoopNest<> *al,
                  PtrMatrix<int64_t> iM)
     : basePointer(other.basePointer), loop(al), indMat(iM),

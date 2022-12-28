@@ -123,7 +123,7 @@ struct LU {
     return d;
   }
   [[nodiscard]] auto perm() const -> llvm::SmallVector<unsigned> {
-    Col M = F.numCol();
+    Col<> M = F.numCol();
     llvm::SmallVector<unsigned> perm;
     for (size_t m = 0; m < M; ++m)
       perm.push_back(m);

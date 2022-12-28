@@ -260,9 +260,25 @@ static_assert(AbstractVector<PtrVector<Rational>>);
 static_assert(AbstractVector<LinearAlgebra::ElementwiseVectorBinaryOp<
                 LinearAlgebra::Sub, PtrVector<Rational>, PtrVector<Rational>>>);
 
+struct RationalPtrVector {
+  using eltype = Rational;
+  [[no_unique_address]] PtrMatrix<int64_t, Static<size_t, 2>, unsigned,
+                                  unsigned>
+    data;
+
+  auto operator[](size_t i) const -> Rational {
+    return Rational{data(0, i), data(1, i)};
+  }
+  auto operator()(size_t i) const -> Rational {
+    return Rational{data(0, i), data(1, i)};
+  }
+
+  [[nodiscard]] auto size() const -> size_t { return size_t(data.numCol()); }
+  [[nodiscard]] auto view() const -> RationalPtrVector { return *this; }
+};
 struct RationalVector {
   using eltype = Rational;
-  Matrix<int64_t, 2, 0, 32> data;
+  [[no_unique_address]] Matrix<int64_t, Static<size_t, 2>, unsigned, 32> data;
 
   auto operator[](size_t i) const -> Rational {
     return Rational{data(0, i), data(1, i)};
@@ -271,7 +287,7 @@ struct RationalVector {
     return Rational{data(0, i), data(1, i)};
   }
   struct Reference {
-    Matrix<int64_t, 2, 0, 32> &data;
+    MutPtrMatrix<int64_t, Static<size_t, 2>, unsigned, unsigned> data;
     size_t i;
     auto operator=(Rational r) -> Rational {
       data(0, i) = r.numerator;
@@ -282,6 +298,9 @@ struct RationalVector {
   };
   auto operator[](size_t i) -> Reference { return Reference{data, i}; }
   auto operator()(size_t i) -> Reference { return Reference{data, i}; }
-  auto size() const -> size_t { return size_t(data.numCol()); }
+  [[nodiscard]] auto size() const -> size_t { return size_t(data.numCol()); }
+  [[nodiscard]] auto view() const -> RationalPtrVector {
+    return RationalPtrVector{data};
+  }
 };
 static_assert(AbstractVector<RationalVector>);

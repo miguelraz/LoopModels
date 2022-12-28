@@ -85,7 +85,7 @@ struct DependencePolyhedra : SymbolicEqPolyhedra {
       findFirstNonEqual(x.getFusionOmega(), y.getFusionOmega());
     const size_t xDim = x.getArrayDim();
     const size_t yDim = y.getArrayDim();
-    IntMatrix A(numLoopsCommon, xDim + yDim);
+    IntMatrix A(toRow(numLoopsCommon), toCol(xDim + yDim));
     if (!numLoopsCommon)
       return A;
     // indMats cols are [innerMostLoop, ..., outerMostLoop]
@@ -155,7 +155,7 @@ struct DependencePolyhedra : SymbolicEqPolyhedra {
     assert(oldToNewMap1.size() == ma1.loop->S.size());
 
     // numDep1Var = nv1;
-    const Row nc = nc0 + nc1;
+    const Row<> nc = nc0 + nc1;
     IntMatrix NS{nullSpace(ma0, ma1)};
     const size_t nullDim{NS.numRow()};
     const size_t indexDim{ma0.getArrayDim()};
@@ -220,7 +220,7 @@ struct DependencePolyhedra : SymbolicEqPolyhedra {
     initializeComparator();
     pruneBounds();
   }
-  static constexpr auto getNumLambda(Row numIneq, Row numEq) -> size_t {
+  static constexpr auto getNumLambda(Row<> numIneq, Row<> numEq) -> size_t {
     return 1 + size_t(numIneq) + 2 * size_t(numEq);
   }
   [[nodiscard]] auto getNumLambda() const -> size_t {
@@ -759,7 +759,7 @@ struct Dependence {
                              const MemoryAccess &x, const MemoryAccess &y,
                              const Schedule &xSchedule,
                              const Schedule &ySchedule, size_t numLambda,
-                             Col nonTimeDim) -> bool {
+                             Col<> nonTimeDim) -> bool {
     const Simplex &fxy = p.first;
     const Simplex &fyx = p.second;
     const size_t numLoopsX = x.getNumLoops();
@@ -821,7 +821,7 @@ struct Dependence {
   }
   static auto checkDirection(const std::pair<Simplex, Simplex> &p,
                              const MemoryAccess &x, const MemoryAccess &y,
-                             size_t numLambda, Col nonTimeDim) -> bool {
+                             size_t numLambda, Col<> nonTimeDim) -> bool {
     const Simplex &fxy = p.first;
     const Simplex &fyx = p.second;
     const size_t numLoopsX = x.getNumLoops();
