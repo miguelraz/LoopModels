@@ -3,6 +3,7 @@
 #include "./GreatestCommonDivisor.hpp"
 #include "./Math.hpp"
 #include "./Utilities.hpp"
+#include "StaticInts.hpp"
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -23,9 +24,10 @@ constexpr inline auto gcdxScale(int64_t a, int64_t b)
   return std::make_tuple(p, q, a / g, b / g);
 }
 // zero out below diagonal
-inline void zeroSupDiagonal(MutPtrMatrix<int64_t> A,
-                            MutSquarePtrMatrix<int64_t> K, size_t i, Row M,
-                            Col N) {
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+inline void zeroSupDiagonal(MutPtrMatrix<int64_t, I, J, X> A,
+                            MutSquarePtrMatrix<int64_t, I> K, size_t i, Row<> M,
+                            Col<> N) {
   size_t minMN = std::min(size_t(M), size_t(N));
   for (size_t j = i + 1; j < M; ++j) {
     int64_t Aii = A(i, i);
@@ -64,9 +66,10 @@ inline void zeroSupDiagonal(MutPtrMatrix<int64_t> A,
 }
 // This method is only called by orthogonalize, hence we can assume
 // (Akk == 1) || (Akk == -1)
-inline void zeroSubDiagonal(MutPtrMatrix<int64_t> A,
-                            MutSquarePtrMatrix<int64_t> K, size_t k, Row M,
-                            Col N) {
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+inline void zeroSubDiagonal(MutPtrMatrix<int64_t, I, J, X> A,
+                            MutSquarePtrMatrix<int64_t, I> K, size_t k, Row<> M,
+                            Col<> N) {
   int64_t Akk = A(k, k);
   if (Akk == -1) {
     for (size_t m = 0; m < N; ++m)
@@ -104,10 +107,11 @@ solvePair(LinearAlgebra::AbstractRowMajorMatrix auto &A,
   return std::make_pair(MutPtrMatrix(A), MutPtrMatrix(B));
 }
 
-static inline auto
-pivotRows(std::pair<MutPtrMatrix<int64_t>, MutPtrMatrix<int64_t>> AK, Col i,
-          Row M, Row piv) -> bool {
-  Row j = piv;
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+static inline auto pivotRows(
+  std::pair<MutPtrMatrix<int64_t, I, J, X>, MutPtrMatrix<int64_t, I, J, X>> AK,
+  Col<> i, Row<> M, Row<> piv) -> bool {
+  Row<> j = piv;
   while (AK.first(piv, i) == 0)
     if (++piv == M)
       return true;
@@ -117,14 +121,16 @@ pivotRows(std::pair<MutPtrMatrix<int64_t>, MutPtrMatrix<int64_t>> AK, Col i,
   }
   return false;
 }
-static inline auto pivotRows(MutPtrMatrix<int64_t> A,
-                             MutSquarePtrMatrix<int64_t> K, size_t i, Row M)
-  -> bool {
-  return pivotRows(solvePair(A, K), Col{i}, M, Row{i});
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+static inline auto pivotRows(MutPtrMatrix<int64_t, I, J, X> A,
+                             MutSquarePtrMatrix<int64_t, I> K, size_t i,
+                             Row<> M) -> bool {
+  return pivotRows(solvePair(A, K), Col<>{i}, M, Row<>{i});
 }
-static inline auto pivotRows(MutPtrMatrix<int64_t> A, Col i, Row M, Row piv)
-  -> bool {
-  Row j = piv;
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+static inline auto pivotRows(MutPtrMatrix<int64_t, I, J, X> A, Col<> i, Row<> M,
+                             Row<> piv) -> bool {
+  Row<> j = piv;
   while (A(piv, i) == 0)
     if (++piv == size_t(M))
       return true;
@@ -132,11 +138,15 @@ static inline auto pivotRows(MutPtrMatrix<int64_t> A, Col i, Row M, Row piv)
     swap(A, j, piv);
   return false;
 }
-inline auto pivotRows(MutPtrMatrix<int64_t> A, size_t i, Row N) -> bool {
-  return pivotRows(A, Col{i}, N, Row{i});
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+inline auto pivotRows(MutPtrMatrix<int64_t, I, J, X> A, size_t i, Row<> N)
+  -> bool {
+  return pivotRows(A, Col<>{i}, N, Row<>{i});
 }
 
-inline void dropCol(MutPtrMatrix<int64_t> A, size_t i, Row M, Col N) {
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+inline void dropCol(MutPtrMatrix<int64_t, I, J, X> A, size_t i, Row<> M,
+                    Col<> N) {
   // if any rows are left, we shift them up to replace it
   if (N <= i)
     return;
@@ -146,7 +156,8 @@ inline void dropCol(MutPtrMatrix<int64_t> A, size_t i, Row M, Col N) {
       A(m, n) = A(m, n + 1);
 }
 
-inline auto orthogonalizeBang(MutPtrMatrix<int64_t> A)
+template <IntConvertible I, IntConvertible J, IntConvertible X>
+inline auto orthogonalizeBang(MutPtrMatrix<int64_t, I, J, X> A)
   -> std::pair<SquareMatrix<int64_t>, llvm::SmallVector<unsigned>> {
   // we try to orthogonalize with respect to as many rows of `A` as we can
   // prioritizing earlier rows.
@@ -178,16 +189,17 @@ inline auto orthogonalizeBang(MutPtrMatrix<int64_t> A)
 }
 inline auto orthogonalize(IntMatrix A)
   -> std::pair<SquareMatrix<int64_t>, llvm::SmallVector<unsigned>> {
+  // return orthogonalizeBang(MutPtrMatrix(A));
   return orthogonalizeBang(A);
 }
 
-static inline void zeroSupDiagonal(MutPtrMatrix<int64_t> A, Col r, Row c) {
+static inline void zeroSupDiagonal(MutPtrMatrix<int64_t> A, Col<> r, Row<> c) {
   auto [M, N] = A.size();
-  for (Row j = c + 1; j < M; ++j) {
+  for (Row<> j = c + 1; j < M; ++j) {
     int64_t Aii = A(c, r);
     if (int64_t Aij = A(j, r)) {
       const auto [p, q, Aiir, Aijr] = gcdxScale(Aii, Aij);
-      for (Col k = 0; k < N; ++k) {
+      for (Col<> k = 0; k < N; ++k) {
         int64_t Aki = A(c, k);
         int64_t Akj = A(j, k);
         A(c, k) = p * Aki + q * Akj;

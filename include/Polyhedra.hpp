@@ -23,7 +23,11 @@ inline auto printPositive(llvm::raw_ostream &os, size_t stop)
     os << "v_" << i << " >= 0\n";
   return os;
 }
-
+template <typename T, typename S>
+concept MaybeVector =
+  std::is_same_v<T, EmptyVector<S>> || std::is_same_v<T, PtrVector<S>> ||
+  std::is_same_v<T, MutPtrVector<S>> || std::is_same_v<T, Vector<S>> ||
+  std::is_same_v<T, llvm::SmallVector<S>>;
 /// Can we represent Polyhedra using slack variables + equalities?
 /// What must we do with Polyhedra?
 /// 1) A*x >= 0 && c'x >= 0 <-> l_0 + l'Ax == c'x && l >= 0 && l_0 >= 0

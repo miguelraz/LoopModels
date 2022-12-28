@@ -7,6 +7,7 @@
 template <typename T, T N> struct Static {
   using type = T;
   static constexpr bool isStatic = true;
+  constexpr Static() = default;
   template <typename O, O M>
   constexpr auto operator+(const Static<O, M> &) const {
     return Static<decltype(N + M), N + M>{};
@@ -21,10 +22,12 @@ template <typename T, T N> struct Static {
   }
   template <typename O, O M>
   constexpr auto operator/(const Static<O, M> &) const {
+    static_assert(M != 0, "Division by zero");
     return Static<decltype(N / M), N / M>{};
   }
   template <typename O, O M>
   constexpr auto operator%(const Static<O, M> &) const {
+    static_assert(M != 0, "Remainder in division by zero");
     return Static<decltype(N % M), N % M>{};
   }
   template <typename O, O M>
