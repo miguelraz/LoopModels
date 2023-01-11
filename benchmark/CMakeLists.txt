@@ -16,16 +16,13 @@ include(../cmake/CPM.cmake)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 CPMAddPackage(
-  NAME benchmark
-  GITHUB_REPOSITORY google/benchmark
-  VERSION 1.7.1
+  NAME nanobench
+  GITHUB_REPOSITORY martinus/nanobench
+  VERSION 4.3.9
   OPTIONS "BENCHMARK_ENABLE_TESTING Off"
 )
-
-if(benchmark_ADDED)
-  # enable c++11 to avoid compilation errors
-  set_target_properties(benchmark PROPERTIES CXX_STANDARD 11)
-endif()
+CPMAddPackage("gh:martinus/nanobench#v4.3.9")
+set_target_properties(nanobench PROPERTIES CXX_STANDARD 20)
 
 file(GLOB benchmarks CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
@@ -39,7 +36,7 @@ message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 message(STATUS "PROJECT_SOURCE_DIR: ${PROJECT_SOURCE_DIR}")
 message(STATUS "LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
 
-target_link_libraries(${PROJECT_NAME} PRIVATE benchmark LLVM)
+target_link_libraries(${PROJECT_NAME} PRIVATE nanobench LLVM)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(${PROJECT_NAME} PRIVATE -ferror-limit=2)
@@ -49,6 +46,7 @@ endif()
 
 
 if (ENABLE_NATIVE_COMPILATION)
+  include(CheckCXXCompilerFlag)
   target_compile_options(${PROJECT_NAME} PRIVATE -march=native)
   check_cxx_compiler_flag("-mprefer-vector-width=512" VEC512)
   if (VEC512)

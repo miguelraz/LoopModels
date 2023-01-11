@@ -2,12 +2,12 @@
 #include "../include/NormalForm.hpp"
 #include "../include/Orthogonalize.hpp"
 #include "../include/Simplex.hpp"
-#include <benchmark/benchmark.h>
 #include <cstddef>
 #include <cstdint>
 #include <llvm/ADT/SmallVector.h>
+#include <nanobench.h>
 
-static void BM_NullSpace(benchmark::State &state) {
+static void BM_NullSpace(ankerl::nanobench::Bench &bench) {
 
   IntMatrix B(Row{6}, Col{4});
   B(0, 0) = 1;
@@ -35,12 +35,10 @@ static void BM_NullSpace(benchmark::State &state) {
   // std::cout << "B=\n" << B << "\nnullSpace(B) =\n" <<
   // NormalForm::nullSpace(B) << std::endl;
   IntMatrix A;
-  for (auto b : state) A = NormalForm::nullSpace(B);
+  bench.run("nullSpace0", [&] { A = NormalForm::nullSpace(B); });
 }
-// Register the function as a benchmark
-BENCHMARK(BM_NullSpace);
 
-static void BM_NullSpace2000(benchmark::State &state) {
+static void BM_NullSpace2000(ankerl::nanobench::Bench &bench) {
   const size_t N = 20;
   IntMatrix A(Row{N}, Col{N});
   A(0, 0) = 2;
@@ -56,14 +54,12 @@ static void BM_NullSpace2000(benchmark::State &state) {
 
   // fourth row is 0
   IntMatrix NS;
-  for (auto b : state) NS = NormalForm::nullSpace(A);
+  bench.run("nullSpace2000", [&] { NS = NormalForm::nullSpace(A); });
   // std::cout << "NS.size() = (" << NS.numRow() << ", " << NS.numCol() << ")"
   //           << std::endl;
 }
-// Register the function as a benchmark
-BENCHMARK(BM_NullSpace2000);
 
-static void BM_Orthogonalize(benchmark::State &state) {
+static void BM_Orthogonalize(ankerl::nanobench::Bench &bench) {
   IntMatrix A(Row{7}, Col{7});
   IntMatrix B;
   A(1, 1) = -2;
@@ -115,11 +111,10 @@ static void BM_Orthogonalize(benchmark::State &state) {
   A(7, 5) = 1;
   A(7, 6) = 0;
   A(7, 7) = 1;
-  for (auto b : state) B = orthogonalize(A);
+  bench.run("Orthogonalize", [&] { B = orthogonalize(A); });
 }
-BENCHMARK(BM_Orthogonalize);
 
-static void BM_Bareiss2000(benchmark::State &state) {
+static void BM_Bareiss2000(ankerl::nanobench::Bench &bench) {
   const size_t N = 20;
   IntMatrix A(Row{N}, Col{N});
   A(0, 0) = 2;
@@ -142,18 +137,14 @@ static void BM_Bareiss2000(benchmark::State &state) {
   llvm::SmallVector<size_t, 16> pivots;
   pivots.reserve(N);
   IntMatrix B;
-  for (auto b : state) {
+  bench.run("Bareiss2000", [&] {
     pivots.clear();
     B = A;
     NormalForm::bareiss(B, pivots);
-  }
-  // std::cout << "NS.size() = (" << NS.numRow() << ", " << NS.numCol() << ")"
-  //           << std::endl;
+  });
 }
-// Register the function as a benchmark
-BENCHMARK(BM_Bareiss2000);
 
-static void BM_Simplex0(benchmark::State &state) {
+static void BM_Simplex0(ankerl::nanobench::Bench &bench) {
   IntMatrix tableau{
     "[0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
     "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
@@ -1073,12 +1064,19 @@ static void BM_Simplex0(benchmark::State &state) {
   Simplex simpBackup{tableau};
   Simplex simp;
   Vector<Rational> sol(37);
-  for (auto b : state) {
+  bench.run("Simplex.lexMinimize", [&]() {
     simp = simpBackup;
     simp.lexMinimize(sol);
-  }
+  });
 }
-BENCHMARK(BM_Simplex0);
 
-// NOLINTNEXTLINE
-BENCHMARK_MAIN();
+int main() {
+  ankerl::nanobench::Bench b;
+  b.performanceCounters(true);
+  BM_NullSpace(b);
+  BM_NullSpace2000(b);
+  BM_Orthogonalize(b);
+  BM_Bareiss2000(b);
+  BM_Simplex0(b);
+  return 0;
+}
