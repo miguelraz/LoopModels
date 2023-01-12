@@ -15,48 +15,46 @@ template <is_int_v<32> T> constexpr auto widen(T x) -> int64_t { return x; }
 template <is_int_v<64> T> constexpr auto widen(T x) -> __int128_t { return x; }
 template <is_int_v<32> T> constexpr auto splitInt(T x) -> int64_t { return x; }
 
-struct Rational {
-  [[no_unique_address]] int64_t numerator{0};
-  [[no_unique_address]] int64_t denominator{1};
+template <typename T> struct Rational {
+  [[no_unique_address]] T numerator{0};
+  [[no_unique_address]] T denominator{1};
 
-  constexpr Rational() = default;
-  constexpr Rational(int64_t coef) : numerator(coef){};
-  constexpr Rational(int coef) : numerator(coef){};
-  constexpr Rational(int64_t n, int64_t d)
+  constexpr Rational<T>() = default;
+  constexpr Rational<T>(T coef) : numerator(coef){};
+  constexpr Rational<T>(T n, T d)
     : numerator(d > 0 ? n : -n), denominator(n ? (d > 0 ? d : -d) : 1) {}
-  constexpr static auto create(int64_t n, int64_t d) -> Rational {
+  constexpr static auto create(T n, T d) -> Rational<T> {
     if (n) {
-      int64_t sign = 2 * (d > 0) - 1;
-      int64_t g = gcd(n, d);
+      T sign = 2 * (d > 0) - 1;
+      T g = gcd(n, d);
       n *= sign;
       d *= sign;
       if (g != 1) {
         n /= g;
         d /= g;
       }
-      return Rational{n, d};
+      return Rational<T>{n, d};
     } else {
-      return Rational{0, 1};
+      return Rational<T>{0, 1};
     }
   }
-  constexpr static auto createPositiveDenominator(int64_t n, int64_t d)
-    -> Rational {
+  constexpr static auto createPositiveDenominator(T n, T d) -> Rational<T> {
     if (n) {
-      int64_t g = gcd(n, d);
+      T g = gcd(n, d);
       if (g != 1) {
         n /= g;
         d /= g;
       }
-      return Rational{n, d};
+      return Rational<T>{n, d};
     } else {
-      return Rational{0, 1};
+      return Rational<T>{0, 1};
     }
   }
 
-  [[nodiscard]] constexpr auto safeAdd(Rational y) const
-    -> std::optional<Rational> {
+  [[nodiscard]] constexpr auto safeAdd(Rational<T> y) const
+    -> std::optional<Rational<T>> {
     auto [xd, yd] = divgcd(denominator, y.denominator);
-    int64_t a, b, n, d;
+    T a, b, n, d;
     bool o1 = __builtin_mul_overflow(numerator, yd, &a);
     bool o2 = __builtin_mul_overflow(y.numerator, xd, &b);
     bool o3 = __builtin_mul_overflow(denominator, yd, &d);
@@ -65,24 +63,24 @@ struct Rational {
       return {};
     } else if (n) {
       auto [nn, nd] = divgcd(n, d);
-      return Rational{nn, nd};
+      return Rational<T>{nn, nd};
     } else {
-      return Rational{0, 1};
+      return Rational<T>{0, 1};
     }
   }
-  constexpr auto operator+(Rational y) const -> Rational {
+  constexpr auto operator+(Rational<T> y) const -> Rational<T> {
     return *safeAdd(y); // NOLINT(bugprone-unchecked-optional-access)
   }
-  constexpr auto operator+=(Rational y) -> Rational & {
-    std::optional<Rational> a = *this + y;
+  constexpr auto operator+=(Rational<T> y) -> Rational<T> & {
+    std::optional<Rational<T>> a = *this + y;
     assert(a.has_value());
     *this = *a;
     return *this;
   }
-  [[nodiscard]] constexpr auto safeSub(Rational y) const
-    -> std::optional<Rational> {
+  [[nodiscard]] constexpr auto safeSub(Rational<T> y) const
+    -> std::optional<Rational<T>> {
     auto [xd, yd] = divgcd(denominator, y.denominator);
-    int64_t a, b, n, d;
+    T a, b, n, d;
     bool o1 = __builtin_mul_overflow(numerator, yd, &a);
     bool o2 = __builtin_mul_overflow(y.numerator, xd, &b);
     bool o3 = __builtin_mul_overflow(denominator, yd, &d);
@@ -91,48 +89,48 @@ struct Rational {
       return {};
     } else if (n) {
       auto [nn, nd] = divgcd(n, d);
-      return Rational{nn, nd};
+      return Rational<T>{nn, nd};
     } else {
-      return Rational{0, 1};
+      return Rational<T>{0, 1};
     }
   }
-  constexpr auto operator-(Rational y) const -> Rational {
+  constexpr auto operator-(Rational<T> y) const -> Rational<T> {
     return *safeSub(y); // NOLINT(bugprone-unchecked-optional-access)
   }
-  constexpr auto operator-=(Rational y) -> Rational & {
-    std::optional<Rational> a = *this - y;
+  constexpr auto operator-=(Rational<T> y) -> Rational<T> & {
+    std::optional<Rational<T>> a = *this - y;
     assert(a.has_value());
     *this = *a;
     return *this;
   }
-  [[nodiscard]] constexpr auto safeMul(int64_t y) const
-    -> std::optional<Rational> {
+  [[nodiscard]] constexpr auto safeMul(T y) const
+    -> std::optional<Rational<T>> {
     auto [xd, yn] = divgcd(denominator, y);
-    int64_t n;
+    T n;
     if (__builtin_mul_overflow(numerator, yn, &n)) return {};
-    else return Rational{n, xd};
+    else return Rational<T>{n, xd};
   }
-  [[nodiscard]] constexpr auto safeMul(Rational y) const
-    -> std::optional<Rational> {
+  [[nodiscard]] constexpr auto safeMul(Rational<T> y) const
+    -> std::optional<Rational<T>> {
     if ((numerator != 0) & (y.numerator != 0)) {
       auto [xn, yd] = divgcd(numerator, y.denominator);
       auto [xd, yn] = divgcd(denominator, y.numerator);
-      int64_t n, d;
+      T n, d;
       bool o1 = __builtin_mul_overflow(xn, yn, &n);
       bool o2 = __builtin_mul_overflow(xd, yd, &d);
       if (o1 | o2) return {};
-      else return Rational{n, d};
+      else return Rational<T>{n, d};
     } else {
-      return Rational{0, 1};
+      return Rational<T>{0, 1};
     }
   }
-  constexpr auto operator*(int64_t y) const -> Rational {
+  constexpr auto operator*(T y) const -> Rational<T> {
     return *safeMul(y); // NOLINT(bugprone-unchecked-optional-access)
   }
-  constexpr auto operator*(Rational y) const -> Rational {
+  constexpr auto operator*(Rational<T> y) const -> Rational<T> {
     return *safeMul(y); // NOLINT(bugprone-unchecked-optional-access)
   }
-  constexpr auto operator*=(Rational y) -> Rational & {
+  constexpr auto operator*=(Rational<T> y) -> Rational<T> & {
     if ((numerator != 0) & (y.numerator != 0)) {
       auto [xn, yd] = divgcd(numerator, y.denominator);
       auto [xd, yn] = divgcd(denominator, y.numerator);
@@ -144,52 +142,52 @@ struct Rational {
     }
     return *this;
   }
-  [[nodiscard]] constexpr auto inv() const -> Rational {
+  [[nodiscard]] constexpr auto inv() const -> Rational<T> {
     if (numerator < 0) {
       // make sure we don't have overflow
       assert(denominator != std::numeric_limits<int64_t>::min());
-      return Rational{-denominator, -numerator};
+      return Rational<T>{-denominator, -numerator};
     } else {
-      return Rational{denominator, numerator};
+      return Rational<T>{denominator, numerator};
     }
-    // return Rational{denominator, numerator};
+    // return Rational<T>{denominator, numerator};
     // bool positive = numerator > 0;
-    // return Rational{positive ? denominator : -denominator,
+    // return Rational<T>{positive ? denominator : -denominator,
     //                 positive ? numerator : -numerator};
   }
-  [[nodiscard]] constexpr auto safeDiv(Rational y) const
-    -> std::optional<Rational> {
+  [[nodiscard]] constexpr auto safeDiv(Rational<T> y) const
+    -> std::optional<Rational<T>> {
     return (*this) * y.inv();
   }
-  constexpr auto operator/(Rational y) const -> Rational {
+  constexpr auto operator/(Rational<T> y) const -> Rational<T> {
     return *safeDiv(y); // NOLINT(bugprone-unchecked-optional-access)
   }
   // *this -= a*b
-  constexpr auto fnmadd(Rational a, Rational b) -> bool {
-    if (std::optional<Rational> ab = a.safeMul(b)) {
-      if (std::optional<Rational> c = safeSub(*ab)) {
+  constexpr auto fnmadd(Rational<T> a, Rational<T> b) -> bool {
+    if (std::optional<Rational<T>> ab = a.safeMul(b)) {
+      if (std::optional<Rational<T>> c = safeSub(*ab)) {
         *this = *c;
         return false;
       }
     }
     return true;
   }
-  constexpr auto div(Rational a) -> bool {
-    if (std::optional<Rational> d = safeDiv(a)) {
+  constexpr auto div(Rational<T> a) -> bool {
+    if (std::optional<Rational<T>> d = safeDiv(a)) {
       *this = *d;
       return false;
     }
     return true;
   }
-  // Rational operator/=(Rational y) { return (*this) *= y.inv(); }
+  // Rational<T> operator/=(Rational<T> y) { return (*this) *= y.inv(); }
   constexpr operator double() {
     return double(numerator) / double(denominator);
   }
 
-  constexpr auto operator==(Rational y) const -> bool {
+  constexpr auto operator==(Rational<T> y) const -> bool {
     return (numerator == y.numerator) & (denominator == y.denominator);
   }
-  constexpr auto operator!=(Rational y) const -> bool {
+  constexpr auto operator!=(Rational<T> y) const -> bool {
     return (numerator != y.numerator) | (denominator != y.denominator);
   }
   [[nodiscard]] constexpr auto isEqual(int64_t y) const -> bool {
@@ -201,24 +199,24 @@ struct Rational {
   constexpr auto operator==(int64_t y) const -> bool { return isEqual(y); }
   constexpr auto operator!=(int y) const -> bool { return !isEqual(y); }
   constexpr auto operator!=(int64_t y) const -> bool { return !isEqual(y); }
-  constexpr auto operator<(Rational y) const -> bool {
+  constexpr auto operator<(Rational<T> y) const -> bool {
     return (widen(numerator) * widen(y.denominator)) <
            (widen(y.numerator) * widen(denominator));
   }
-  constexpr auto operator<=(Rational y) const -> bool {
+  constexpr auto operator<=(Rational<T> y) const -> bool {
     return (widen(numerator) * widen(y.denominator)) <=
            (widen(y.numerator) * widen(denominator));
   }
-  constexpr auto operator>(Rational y) const -> bool {
+  constexpr auto operator>(Rational<T> y) const -> bool {
     return (widen(numerator) * widen(y.denominator)) >
            (widen(y.numerator) * widen(denominator));
   }
-  constexpr auto operator>=(Rational y) const -> bool {
+  constexpr auto operator>=(Rational<T> y) const -> bool {
     return (widen(numerator) * widen(y.denominator)) >=
            (widen(y.numerator) * widen(denominator));
   }
   constexpr auto operator>=(int y) const -> bool {
-    return *this >= Rational(y);
+    return *this >= Rational<T>(y);
   }
   [[nodiscard]] constexpr auto isInteger() const -> bool {
     return denominator == 1;
@@ -226,7 +224,7 @@ struct Rational {
   constexpr void negate() { numerator = -numerator; }
   constexpr operator bool() const { return numerator != 0; }
 
-  friend inline auto operator<<(llvm::raw_ostream &os, const Rational &x)
+  friend inline auto operator<<(llvm::raw_ostream &os, const Rational<T> &x)
     -> llvm::raw_ostream & {
     os << x.numerator;
     if (x.denominator != 1) os << " // " << x.denominator;
@@ -234,16 +232,18 @@ struct Rational {
   }
   void dump() const { llvm::errs() << *this << "\n"; }
 };
-constexpr auto gcd(Rational x, Rational y) -> std::optional<Rational> {
-  return Rational{gcd(x.numerator, y.numerator),
-                  lcm(x.denominator, y.denominator)};
+template <typename T>
+constexpr auto gcd(Rational<T> x, Rational<T> y) -> std::optional<Rational<T>> {
+  return Rational<T>{gcd(x.numerator, y.numerator),
+                     lcm(x.denominator, y.denominator)};
 }
-inline auto denomLCM(PtrVector<Rational> x) -> int64_t {
+inline auto denomLCM(PtrVector<Rational<int64_t>> x) -> int64_t {
   int64_t l = 1;
   for (auto r : x) l = lcm(l, r.denominator);
   return l;
 }
 
-static_assert(AbstractVector<PtrVector<Rational>>);
+static_assert(AbstractVector<PtrVector<Rational<int64_t>>>);
 static_assert(AbstractVector<LinearAlgebra::ElementwiseVectorBinaryOp<
-                LinearAlgebra::Sub, PtrVector<Rational>, PtrVector<Rational>>>);
+                LinearAlgebra::Sub, PtrVector<Rational<int64_t>>,
+                PtrVector<Rational<int64_t>>>>);

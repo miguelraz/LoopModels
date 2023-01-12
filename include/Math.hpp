@@ -11,6 +11,10 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <eve/module/core.hpp>
+#include <eve/module/core/constant/zero.hpp>
+#include <eve/module/math.hpp>
+#include <eve/wide.hpp>
 #include <iterator>
 #include <limits>
 #include <llvm/ADT/ArrayRef.h>
@@ -35,7 +39,7 @@
 //     std::basic_stacktrace<std::allocator<std::stacktrace_entry>>;
 // #endif
 
-struct Rational;
+template <typename T> struct Rational;
 namespace LinearAlgebra {
 
 inline auto allZero(const auto &x) -> bool {
@@ -86,6 +90,41 @@ inline auto operator<<(llvm::raw_ostream &os, AxisType x)
   llvm_unreachable("Unknown AxisType");
   return os;
 }
+template <size_t N, typename C> struct WideMask {
+  size_t i;
+  C c;
+};
+template <size_t N> struct Wide {
+  size_t i;
+  constexpr auto operator[](ptrdiff_t r) {
+    auto c = eve::keep_first(r).else_(eve::zero);
+    return WideMask<N, decltype(c)>{i, c};
+  }
+};
+template <typename T> struct Reference {
+  T *ptr;
+  operator T() const { return *ptr; }
+  auto operator=(T x) -> T & {
+    *ptr = x;
+    return *ptr;
+  }
+  auto operator=(eve::wide<T> x) -> Reference & {
+    eve::store(x, ptr);
+    return *this;
+  }
+};
+template <typename T, typename C> struct MaskedReference {
+  T *ptr;
+  C c;
+  auto operator=(T x) -> T & {
+    *ptr = x;
+    return *ptr;
+  }
+  auto operator=(eve::wide<T> x) -> MaskedReference & {
+    eve::store[c](x, ptr);
+    return *this;
+  }
+};
 
 // strong typing
 template <AxisType T> struct AxisInt {
@@ -294,9 +333,15 @@ concept AbstractRowMajorMatrix =
 
 inline auto copyto(AbstractVector auto &y, const AbstractVector auto &x)
   -> auto & {
-  const size_t M = x.size();
+  ptrdiff_t M = x.size(), i = 0;
   y.extendOrAssertSize(M);
-  for (size_t i = 0; i < M; ++i) y[i] = x[i];
+  if constexpr (eve::arithmetic_scalar_value<eltype_t<decltype(y)>>) {
+    constexpr ptrdiff_t w = eve::wide<eltype_t<decltype(y)>>::size();
+    for (; i <= M - w; i += w) y[Wide<w>(i)] = x[Wide<w>(i)];
+    if (ptrdiff_t r = M - i) y[Wide<w>(i)[r]] = x[Wide<w>(i)[r]];
+  } else {
+    for (; i < M; ++i) y[i] = x[i];
+  }
   return y;
 }
 inline auto copyto(AbstractMatrixCore auto &A, const AbstractMatrixCore auto &B)
@@ -372,7 +417,7 @@ constexpr auto size(const AbstractVector auto &x) -> size_t { return x.size(); }
 
 template <typename T>
 concept Scalar =
-  std::integral<T> || std::floating_point<T> || std::same_as<T, Rational>;
+  std::integral<T> || std::floating_point<T> || std::same_as<T, Rational<>>;
 
 template <typename T>
 concept VectorOrScalar = AbstractVector<T> || Scalar<T>;
@@ -730,6 +775,22 @@ template <typename T> struct PtrVector {
 #endif
     return mem[canonicalize(i, N)];
   }
+  template <size_t W>
+  [[gnu::flatten]] constexpr auto operator[](const Wide<W> i) const
+    -> eve::wide<T> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + W - 1);
+#endif
+    return eve::load(mem + i.i);
+  }
+  template <size_t W, typename C>
+  [[gnu::flatten]] constexpr auto operator[](const WideMask<W, C> i) const
+    -> eve::wide<T> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + i.c.count() - 1);
+#endif
+    return eve::load[i.c](mem + i.i);
+  }
   [[gnu::flatten]] constexpr auto operator[](Range<size_t, size_t> i) const
     -> PtrVector<T> {
     assert(i.b <= i.e);
@@ -777,6 +838,7 @@ template <typename T> struct PtrVector {
   constexpr PtrVector(NotNull<const T> pt, size_t NN) : mem(pt), N(NN) {}
   PtrVector(llvm::ArrayRef<T> x) : mem(x.data()), N(x.size()) {}
 };
+
 template <typename T> struct MutPtrVector {
   static_assert(!std::is_const_v<T>, "T shouldn't be const");
   using eltype = T;
@@ -796,6 +858,38 @@ template <typename T> struct MutPtrVector {
 #endif
     return mem[canonicalize(i, N)];
   }
+  template <size_t W>
+  [[gnu::flatten]] constexpr auto operator[](const Wide<W> i) const
+    -> eve::wide<T> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + W - 1);
+#endif
+    return eve::load(mem + i.i);
+  }
+  template <size_t W, typename C>
+  [[gnu::flatten]] constexpr auto operator[](const WideMask<W, C> i) const
+    -> eve::wide<T> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + i.c.count() - 1);
+#endif
+    return eve::load[i.c](mem + i.i);
+  }
+  template <size_t W>
+  [[gnu::flatten]] constexpr auto operator[](const Wide<W> i) -> Reference<T> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + W - 1);
+#endif
+    return Reference<T>{mem + i.i};
+  }
+  template <size_t W, typename C>
+  [[gnu::flatten]] constexpr auto operator[](const WideMask<W, C> i)
+    -> MaskedReference<T, C> {
+#ifndef NDEBUG
+    checkIndex(size_t(N), i.i + i.c.count() - 1);
+#endif
+    return MaskedReference<T, C>{mem + i.i, i.c};
+  }
+
   [[nodiscard]] auto front() -> T & {
     assert(N > 0);
     return mem[0];

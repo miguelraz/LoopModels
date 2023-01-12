@@ -37,8 +37,16 @@ add_executable(${PROJECT_NAME} ${benchmarks})
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 message(STATUS "PROJECT_SOURCE_DIR: ${PROJECT_SOURCE_DIR}")
 message(STATUS "LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
+CPMAddPackage(
+  NAME eve
+  GITHUB_REPOSITORY jfalcou/eve
+  GIT_TAG e015b18183df70ff3066e3b7192812d6cfae88d9
+  OPTIONS "EVE_BUILD_TEST OFF"
+  "EVE_BUILD_BENCHMARKS OFF"
+  "EVE_BUILD_DOCUMENTATION OFF"
+)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE benchmark LLVM)
+target_link_libraries(${PROJECT_NAME} PRIVATE benchmark LLVM, eve::eve)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(${PROJECT_NAME} PRIVATE -ferror-limit=2)

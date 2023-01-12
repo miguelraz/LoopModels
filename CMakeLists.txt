@@ -87,6 +87,15 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-fcolor-diagnostics)
 endif()
 
+CPMAddPackage(
+  NAME eve
+  GITHUB_REPOSITORY jfalcou/eve
+  GIT_TAG e015b18183df70ff3066e3b7192812d6cfae88d9
+  OPTIONS "EVE_BUILD_TEST OFF"
+  "EVE_BUILD_BENCHMARKS OFF"
+  "EVE_BUILD_DOCUMENTATION OFF"
+)
+
 # if(NOT ((USE_SANITIZER MATCHES "([Uu]ndefined)") OR (USE_SANITIZER MATCHES
 # "([Aa]ddress);([Uu]ndefined)"))) # we use rtti, which is incompatible with the vptr check: #
 # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html target_compile_options(${PROJECT_NAME}
@@ -95,7 +104,7 @@ endif()
 target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->")
 
 # Link dependencies
-target_link_libraries(${PROJECT_NAME} PRIVATE LLVM)
+target_link_libraries(${PROJECT_NAME} PRIVATE LLVM eve::eve)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LLVM_INCLUDE_DIRS})
 target_include_directories(

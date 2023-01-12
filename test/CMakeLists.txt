@@ -50,6 +50,16 @@ message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 message(STATUS "PROJECT_SOURCE_DIR: ${PROJECT_SOURCE_DIR}")
 message(STATUS "LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
 add_dependencies(${PROJECT_NAME} LoopModels)
+
+CPMAddPackage(
+  NAME eve
+  GITHUB_REPOSITORY jfalcou/eve
+  GIT_TAG e015b18183df70ff3066e3b7192812d6cfae88d9
+  OPTIONS "EVE_BUILD_TEST OFF"
+  "EVE_BUILD_BENCHMARKS OFF"
+  "EVE_BUILD_DOCUMENTATION OFF"
+)
+
 target_include_directories(
   ${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/../include ${LLVM_INCLUDE_DIRS}
 )
@@ -82,8 +92,9 @@ target_precompile_headers(
   <type_traits>
   <utility>
 )
+
 # target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} PRIVATE GTest::gtest_main LLVM)
+target_link_libraries(${PROJECT_NAME} PRIVATE GTest::gtest_main LLVM eve::eve)
 set(CXX_STANDARD_REQUIRED ON)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(
